@@ -15,14 +15,29 @@ from apps.hcad_search import run_app2
 
 
 def install_playwright() -> None:
-    """Install Playwright browsers if not already installed."""
+    """Install Playwright browsers and system dependencies."""
+    # Check if we're on Streamlit Cloud
+    is_streamlit_cloud = os.environ.get("STREAMLIT_SHARING_MODE") == "true"
+    
+    if is_streamlit_cloud:
+        # On Streamlit Cloud, install system dependencies first
+        try:
+            subprocess.run([sys.executable, "-m", "playwright", "install-deps"], 
+                          check=True, capture_output=True, timeout=60)
+            st.success("✅ System dependencies installed!")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            st.info("System dependencies installation skipped, continuing...")
+    
     try:
+        # Install Playwright browsers
         subprocess.run([sys.executable, "-m", "playwright", "install"], 
-                      check=True, capture_output=True)
+                      check=True, capture_output=True, timeout=120)
         st.success("✅ Playwright browsers installed successfully!")
     except subprocess.CalledProcessError as e:
         st.error(f"Failed to install Playwright: {e}")
         st.info("Please run 'playwright install' manually in your terminal.")
+    except subprocess.TimeoutExpired:
+        st.error("Playwright installation timed out. Please try again.")
 
 
 def main() -> None:
