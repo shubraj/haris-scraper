@@ -14,45 +14,15 @@ from apps.instrument_scraper import run_app1
 from apps.hcad_search import run_app2
 
 
-def check_playwright() -> bool:
-    """Check if Playwright is working properly."""
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            browser.close()
-        return True
-    except Exception:
-        return False
-
-
 def install_playwright() -> None:
-    """Install Playwright browsers and system dependencies."""
-    # First check if Playwright is already working
-    if check_playwright():
-        st.success("✅ Playwright is already installed and working!")
-        return
-    
+    """Install Playwright browsers if not already installed."""
     try:
-        # Install Playwright browsers with system dependencies
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"], 
-            check=True, 
-            capture_output=True, 
-            text=True
-        )
-        st.success("✅ Playwright and Chromium installed successfully!")
+        subprocess.run([sys.executable, "-m", "playwright", "install"], 
+                      check=True, capture_output=True)
+        st.success("✅ Playwright browsers installed successfully!")
     except subprocess.CalledProcessError as e:
-        st.warning("⚠️ Could not install system dependencies automatically.")
-        st.info("Please run the following commands in your terminal:")
-        st.code("""
-        # For macOS/Linux:
-        sudo playwright install-deps
-        
-        # Or install browsers only:
-        playwright install chromium
-        """, language="bash")
-        st.error(f"Installation error: {e}")
+        st.error(f"Failed to install Playwright: {e}")
+        st.info("Please run 'playwright install' manually in your terminal.")
 
 
 def main() -> None:
