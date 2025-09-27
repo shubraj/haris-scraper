@@ -1,0 +1,679 @@
+from bs4 import BeautifulSoup
+import json
+
+html = """<tbody><tr>
+			<td align="center" valign="top" style="width:180px;">&nbsp;</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">/J</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">/L</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">A</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">A/</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">A/A</td><td align="left" valign="top">Abstract of Assessment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">A/J</td><td align="left" valign="top">Abstract of Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">A/P</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ABNDN</td><td align="left" valign="top">Abandonment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ABOLSH</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ACCEPT</td><td align="left" valign="top">Acceptance</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ACK</td><td align="left" valign="top">Acknowledgement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ADDNM</td><td align="left" valign="top">Addendum</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ADOPT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of a living person</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of Commencement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of Correction of Plat</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of Dormancy</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of Heirship</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Affidavit of Release</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Homestead Affidavit</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AFFT</td><td align="left" valign="top">Small Estate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Boundary or Party wall Agreements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Cable Company Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Declaration of Land Use Restrictive Covenants for Low Income Housing Credits</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Hazardous Substances Certificate and Indemnity</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Life Estate Agreements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Loan Assumptions</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Partnership Agreements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Pre-nuptial Agreements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Protective Covenants</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Recasting Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Regulatory Agreement for Multifamily Housing Projects</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AGMT</td><td align="left" valign="top">Security Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AMEND</td><td align="left" valign="top">Amendment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AMERIC</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ANNEX</td><td align="left" valign="top">Annexation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ANSWER</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">APPEAL</td><td align="left" valign="top">Appeal</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">APPEN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">APPLN</td><td align="left" valign="top">Application of Railroad Commission of Texas</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">APPROV</td><td align="left" valign="top">Approval of Setback Lines</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">APPT</td><td align="left" valign="top">Appointment of Trustee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ASSGN</td><td align="left" valign="top">Assignment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ASSUME</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ASSUMP</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AUTH</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">AWARD</td><td align="left" valign="top">Award</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">B/L</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">B/S</td><td align="left" valign="top">Bill of Sale</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BALLOT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BIRTH</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BLDGLN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BNKRCY</td><td align="left" valign="top">Bankruptcy</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BOND</td><td align="left" valign="top">Bond to Guarantee Contract (Hardeman Act)</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BOND</td><td align="left" valign="top">Bond to Release Lien (Indemnity)</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">BYLAWS</td><td align="left" valign="top">By-Laws of an Association</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">C COPY</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">C/T</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CANCEL</td><td align="left" valign="top">Cancellation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Attachment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Compliance for Specified Work</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Discharge from Internal Revenue Service</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Non-attachment of Federal Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Redemption</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Sale of Seized Property</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate of Vote</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Certificate With Resolution Attached</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Disposition of Interest Certificate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Management Certificate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CERT</td><td align="left" valign="top">Office of Thrift Supervision</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CINST</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CINSTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CINTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CISNTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CLAIM</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONDMN</td><td align="left" valign="top">Condominium</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONEC</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONFIR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONFRM</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONSNT</td><td align="left" valign="top">Authorization to Pay Ad Valorem Taxes</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONSNT</td><td align="left" valign="top">Consent</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONSNT</td><td align="left" valign="top">Consent to Transfer of Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONSTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Cable Company Contract</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Contract</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Contract for Improvements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Contract of Mechanics &amp;  Materialman's Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Contract of Sale</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONT</td><td align="left" valign="top">Earnest Money Contract</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONVEY</td><td align="left" valign="top">Conveyance</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CONVNT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">CORREC</td><td align="left" valign="top">Correction</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">COVENT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">D</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">D/D</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">D/T</td><td align="left" valign="top">Deed of Trust and/or Security Agreements</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">D/T</td><td align="left" valign="top">Deed of Trust to Secure Assumption</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">D/T</td><td align="left" valign="top">Home Equity Contract and Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEANEX</td><td align="left" valign="top">De-Annexation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEATH</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DECD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DECLAR</td><td align="left" valign="top">Declaration</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DECLIN</td><td align="left" valign="top">Decline</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DECREE</td><td align="left" valign="top">Divorce Decree</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DED</td><td align="left" valign="top">Dedication</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Partition Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Public School Land Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Sheriff or Constable's Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Trustee's Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEED</td><td align="left" valign="top">Veterans Land Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DELETE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DEPOST</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DESIGN</td><td align="left" valign="top">Designation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DESIGN</td><td align="left" valign="top">Designation of Pooling Unit</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DESIGN</td><td align="left" valign="top">Designation of Successor Members of the Control Committee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DINSTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DISCHG</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DISCLM</td><td align="left" valign="top">Disclaimer</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DISMIS</td><td align="left" valign="top">Dismissal</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DISSOL</td><td align="left" valign="top">Dissolution of a Partnership</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DONATE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DONT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DREST</td><td align="left" valign="top">Deed Restriction</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DRUG</td><td align="left" valign="top">Drug Free Zones</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">DUPD/T</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">EASMT</td><td align="left" valign="top">Easement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ELECT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ERL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">EST</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ETAL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">EXCLUD</td><td align="left" valign="top">Exclude or Exclusion</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">EXEC</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">EXT</td><td align="left" valign="top">Extension</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">FI STM</td><td align="left" valign="top">Financing Statement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">FIELD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">GIFT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">GRANT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">GRNTEE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">GUANTY</td><td align="left" valign="top">Guaranty Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">HMST</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">INCORP</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">INDENT</td><td align="left" valign="top">Indenture</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">INSTR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">INVENT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">JUDGE</td><td align="left" valign="top">Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">L AFFT</td><td align="left" valign="top">Lien Affidavit</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">L/D</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">L/P</td><td align="left" valign="top">Lis Pendens</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LEASE</td><td align="left" valign="top">Lease</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LETTER</td><td align="left" valign="top">Letter Estate Tax Closing Letter</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LEVY</td><td align="left" valign="top">Notice of Levy on Real Estate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LICENS</td><td align="left" valign="top">License</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Child Support Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Homeowner's Association Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Landlord Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Notice of Administration Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Notice of State Medi-Cal Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Notice of Texas Workforce Commission Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Pension Benefit Guaranty Corp.</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">State Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">Texas Lottery Commission</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LIEN</td><td align="left" valign="top">U.S. Department of Justice</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LN LRD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LNDLRD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LNDRD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LNLORD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">LNLRD</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">M/L</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MANDTE</td><td align="left" valign="top">Mandate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MAP</td><td align="left" valign="top">Map</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MARR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MEMO</td><td align="left" valign="top">Memorandum</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MERGE</td><td align="left" valign="top">Merger</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MINUTE</td><td align="left" valign="top">Minutes of Meeting</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MML</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MODIF</td><td align="left" valign="top">Modification</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MOTION</td><td align="left" valign="top">Motion</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MST DT</td><td align="left" valign="top">Master Form Deed of Trust</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">MTG</td><td align="left" valign="top">Mortgage</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NONSUT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTE</td><td align="left" valign="top">Promissory Note or Real Estate Lien Note</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Certificate of OSSF Requiring Maintenance (Septic Systems Document)</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Certification of Industrial Solid Waste Remediation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Harris County Engineering Dept.Section 1316 Declaration</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice Concerning Loan Foreclosure</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Acceleration of Maturity</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Bankruptcy</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Border of Gulf of Mexico</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Chemical Pits</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Cleanup</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Dedicatory Instruments</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Disaster Assistance Limitation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Improvement Attachment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Improvement Attachment to Real Estate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Installation Affidavit</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Non-Compliance</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Public Hearing</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Purchasers</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Railroad Commission</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Restrictions</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Structure Registration</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Tax Foreclosure</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Trustee's Sale</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice of Utility District</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Notice to form Petition Committee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">NOTICE</td><td align="left" valign="top">Statement of Ownership &amp; Location</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">OATH</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">OFCRTN</td><td align="left" valign="top">Officers Return</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ONT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">OPTION</td><td align="left" valign="top">Option of Purchase</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORD</td><td align="left" valign="top">Ordinance</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Building &amp; Standards Commission Complaint</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Court Order</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Order Changing Name of Person</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Order for Creation of MUD</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Order from Commissioner's Court</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Order granting Application for Foreclosure</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">ORDER</td><td align="left" valign="top">Order of Fraudulent Filing</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">P/A</td><td align="left" valign="top">Power of Attorney</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">P/T</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PARTN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PATENT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PERMIT</td><td align="left" valign="top">PERMIT</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PETN</td><td align="left" valign="top">Petition</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PLEA</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PLEDGE</td><td align="left" valign="top">Pledge</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">POAMC</td><td align="left" valign="top">Property Owners Association Management Certificate</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PROB</td><td align="left" valign="top">Probate Proceedings</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PROPSL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PT AGN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PT REL</td><td align="left" valign="top">Partial Release</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">PT/LT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">Q/S</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">QCD</td><td align="left" valign="top">Quit Claim Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">R</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RATIF</td><td align="left" valign="top">Ratification</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RECLAR</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RECOGN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RECPT</td><td align="left" valign="top">Receipt</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REFUSE</td><td align="left" valign="top">Right of Refusal</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REGST</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REINST</td><td align="left" valign="top">De-acceleration Notice</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REINST</td><td align="left" valign="top">Reinstatement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REINST</td><td align="left" valign="top">Rescission of Acceleration of Loan</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Abatement of Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Affidavit of Release</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Abstract of Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Bankruptcy</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Bond Forfeiture</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Deed of Trust</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Federal Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Homeowner's Association Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Mechanics &amp; Materialman's Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Mortgage</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Right of Redemption</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Release of Vendor's Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Voluntary Cleanup Program Final Certificate of Completion</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REL</td><td align="left" valign="top">Withdrawal of Federal Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REMAP</td><td align="left" valign="top">Remove and Appoint</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REMOVE</td><td align="left" valign="top">Removal &amp; Appointment of Trustee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REMOVE</td><td align="left" valign="top">Removal of Trustee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RENEW</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RENEWL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RENTAL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RENUNC</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REPORT</td><td align="left" valign="top">Report of Sale</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REQUST</td><td align="left" valign="top">Request for Notice</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RES</td><td align="left" valign="top">Resolution</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RESCND</td><td align="left" valign="top">Rescinding of a Trustee Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RESIGN</td><td align="left" valign="top">Resignation of Trustee</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RESTM</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RESTN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RESTR</td><td align="left" valign="top">Restrictions</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RETAKE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RETURN</td><td align="left" valign="top">Return (Notice of a Bond)</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REVOC</td><td align="left" valign="top">Revocation</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">REVOC</td><td align="left" valign="top">Revocation of Power of Attorney and Appointment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RIDER</td><td align="left" valign="top">Rider</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RPT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">RWD</td><td align="left" valign="top">Right of Way Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">S/T</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SCHDLE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SCRIPT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SE</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SGN</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">STATE</td><td align="left" valign="top">Statement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUBORD</td><td align="left" valign="top">Certificate of Subordination of Federal Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUBORD</td><td align="left" valign="top">Subordination</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUPD/T</td><td align="left" valign="top">Supplemental Deed of Trust</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUPIND</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUPLMT</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">SUPPL</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T/</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T/D</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T/L</td><td align="left" valign="top">Notice of Federal Tax Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T/L</td><td align="left" valign="top">Pension Benefit Guaranty Corp. Notice of Federal Lien</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">T/R</td><td align="left" valign="top">Tax Receipt</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">TERM</td><td align="left" valign="top">Termination</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">TR-TAX</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">TRANS</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">TRSALE</td><td align="left" valign="top">Trustee Sale</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">TRUST</td><td align="left" valign="top">Declaration of a Trust or Trust Agreement</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">UFN</td><td align="left" valign="top">UNUSED FILE NUMBER</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">UNK</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">VACATE</td><td align="left" valign="top">Vacation of a Subdivision Plat</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">VARNCE</td><td align="left" valign="top">Variance</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">VOID</td><td align="left" valign="top">Affidavit requesting Hold on an Abstract of Judgment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">W/D</td><td align="left" valign="top">Warranty Deed</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">W/D</td><td align="left" valign="top">Warranty Deed with an Assignment</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">WAIVER</td><td align="left" valign="top">Waiver</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">WILL</td><td align="left" valign="top">Certified Copy of a Probated Will</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">WOJCIK</td><td align="left" valign="top">&nbsp;</td>
+		</tr><tr>
+			<td align="center" valign="top" style="width:180px;">WRIT</td><td align="left" valign="top">Writ of Attachment</td>
+		</tr>
+	</tbody>"""  # truncated for example
+
+soup = BeautifulSoup(html, "html.parser")
+
+result = {}
+
+for row in soup.find_all("tr"):
+    cols = row.find_all("td")
+    if len(cols) >= 2:
+        first_col = cols[0].get_text(strip=True)
+        second_col = cols[1].get_text(strip=True)
+
+        # Skip empty second column
+        if not second_col or second_col == "&nbsp;":
+            continue
+
+        if second_col not in result:
+            result[second_col] = []
+        result[second_col] = first_col
+
+# Save result as JSON file
+with open("instrument_types.json", "w", encoding="utf-8") as f:
+    json.dump(result, f, ensure_ascii=False, indent=4)
+
+print("Saved to instrument_types.json ✅")
