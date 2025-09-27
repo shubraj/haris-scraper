@@ -9,8 +9,7 @@ import os
 from apps.instrument_scraper import run_app1
 from apps.hcad_search import run_app2
 
-# Install Playwright with system dependencies (works on Streamlit Cloud)
-os.system("playwright install-deps")
+# Install Playwright
 os.system("playwright install")
 
 def main():
