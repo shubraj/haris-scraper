@@ -6,41 +6,13 @@ HCAD property searches.
 """
 import streamlit as st
 import os
-import subprocess
-import sys
-from typing import Optional
-
 from apps.instrument_scraper import run_app1
 from apps.hcad_search import run_app2
 
+# Install Playwright (simple approach that works on Streamlit Cloud)
+os.system("playwright install")
 
-def install_playwright() -> None:
-    """Install Playwright browsers and system dependencies."""
-    # Check if we're on Streamlit Cloud
-    is_streamlit_cloud = os.environ.get("STREAMLIT_SHARING_MODE") == "true"
-    
-    if is_streamlit_cloud:
-        # On Streamlit Cloud, install system dependencies first
-        try:
-            subprocess.run([sys.executable, "-m", "playwright", "install-deps"], 
-                          check=True, capture_output=True, timeout=60)
-            st.success("✅ System dependencies installed!")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            st.info("System dependencies installation skipped, continuing...")
-    
-    try:
-        # Install Playwright browsers
-        subprocess.run([sys.executable, "-m", "playwright", "install"], 
-                      check=True, capture_output=True, timeout=120)
-        st.success("✅ Playwright browsers installed successfully!")
-    except subprocess.CalledProcessError as e:
-        st.error(f"Failed to install Playwright: {e}")
-        st.info("Please run 'playwright install' manually in your terminal.")
-    except subprocess.TimeoutExpired:
-        st.error("Playwright installation timed out. Please try again.")
-
-
-def main() -> None:
+def main():
     """Main application entry point."""
     # Set page config
     st.set_page_config(
@@ -49,12 +21,6 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded"
     )
-    
-    # Install Playwright on first run
-    if "playwright_installed" not in st.session_state:
-        with st.spinner("Installing Playwright browsers..."):
-            install_playwright()
-            st.session_state.playwright_installed = True
     
     # Sidebar navigation
     st.sidebar.title("🏠 Harris County Property Scraper")
