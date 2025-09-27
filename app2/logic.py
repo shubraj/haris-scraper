@@ -93,22 +93,33 @@ async def run_search(page, owner_name, legal_desc_clean, legal_desc_full, first_
     successful_name = None
     
     # Try each name variation until we find results
+    tried_once = False
     for attempt, search_name in enumerate(name_variations):
         print(f"Attempt {attempt + 1}: Searching for '{search_name}'")
-        
         result = await perform_single_search(page, search_name)
-        
-        if result:  # If we found an address
+        if result:
             address = result
             successful_name = search_name
             print(f"✓ Found result with name variation: '{search_name}' -> {address}")
             break
         else:
             print(f"✗ No results for: '{search_name}'")
-            if attempt < len(name_variations) - 1:  # Not the last attempt
+            # If only one variant, retry once
+            if len(name_variations) == 1 and not tried_once:
+                print(f"Retrying single variant '{search_name}' once...")
+                await asyncio.sleep(1)
+                tried_once = True
+                result = await perform_single_search(page, search_name)
+                if result:
+                    address = result
+                    successful_name = search_name
+                    print(f"✓ Found result with retry: '{search_name}' -> {address}")
+                    break
+                else:
+                    print(f"✗ No results for retry of: '{search_name}'")
+            elif attempt < len(name_variations) - 1:
                 print(f"Trying next variation...")
                 await asyncio.sleep(1)
-    
     return {
         "owner": owner_name,
         "successful_search_name": successful_name,
