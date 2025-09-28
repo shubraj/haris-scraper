@@ -52,24 +52,25 @@ class PDFAddressExtractorApp:
         
         st.info(f"📊 Found {len(pdf_records)} records with PDFs out of {len(records_df)} total records")
         
-        # Process PDFs automatically
-        with st.spinner("Processing PDFs and extracting addresses..."):
-            results = self._process_pdfs(pdf_records, dpi=300, ocr_mode="--psm 6")
-            
-            if results is not None:
-                st.success(f"✅ Successfully processed {len(results)} records")
+        # Process PDFs with button
+        if st.button("🔍 Extract Addresses from PDFs", type="primary"):
+            with st.spinner("Processing PDFs and extracting addresses..."):
+                results = self._process_pdfs(pdf_records, dpi=300, ocr_mode="--psm 6")
                 
-                # Display results
-                st.write("### 📋 Extracted Addresses")
-                self._display_results(results)
-                
-                # Download results
-                self._download_results(results)
-                
-                return results
-            else:
-                st.error("❌ Failed to process PDFs")
-                return records_df
+                if results is not None:
+                    st.success(f"✅ Successfully processed {len(results)} records")
+                    
+                    # Display results
+                    st.write("### 📋 Extracted Addresses")
+                    self._display_results(results)
+                    
+                    # Download results
+                    self._download_results(results)
+                    
+                    return results
+                else:
+                    st.error("❌ Failed to process PDFs")
+                    return records_df
     
     def _process_pdfs(self, pdf_records: pd.DataFrame, dpi: int, ocr_mode: str) -> Optional[pd.DataFrame]:
         """Process PDFs and extract addresses."""
@@ -202,17 +203,6 @@ class PDFAddressExtractorApp:
         
         # Results table
         st.dataframe(results_df, width='stretch')
-        
-        # Address extraction summary
-        st.write("### 📊 Address Extraction Summary")
-        empty_addresses = len(results_df[results_df['Property Address'] == ''])
-        found_addresses = len(results_df[results_df['Property Address'] != ''])
-        
-        summary_data = pd.DataFrame({
-            'Status': ['Addresses Found', 'No Address Found'],
-            'Count': [found_addresses, empty_addresses]
-        })
-        st.bar_chart(summary_data.set_index('Status'))
     
     def _download_results(self, results_df: pd.DataFrame):
         """Provide download option for results."""
