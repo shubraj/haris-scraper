@@ -74,6 +74,7 @@ def parse_html_to_excel(html):
         record["FileDate"] = cells[2].get_text(strip=True) if len(cells) > 2 else ""
         record["DocType"] = cells[3].get_text(strip=True).split("\n")[0] if len(cells) > 3 else ""
         record["FilmCode"] = cells[7].get_text(strip=True) if len(cells) > 7 else ""
+        
 
         # --- Extract Grantors & Grantees ---
         if len(cells) > 4:

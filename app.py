@@ -8,6 +8,7 @@ import streamlit as st
 import os
 from apps.instrument_scraper import run_app1
 from apps.hcad_search import run_app2
+from apps.pdf_ocr_app import run_pdf_ocr_app
 
 # Install Playwright
 os.system("playwright install")
@@ -27,9 +28,9 @@ def main():
     st.sidebar.markdown("---")
     
     choice = st.sidebar.radio(
-        "Select Step:",
-        ["Step 1: Scrape Instruments", "Step 2: HCAD Search"],
-        help="Step 1: Scrape instrument data from Harris County records\nStep 2: Search for property addresses using HCAD"
+        "Select Tool:",
+        ["Step 1: Scrape Instruments", "Step 2: HCAD Search", "PDF OCR Tool"],
+        help="Step 1: Scrape instrument data from Harris County records\nStep 2: Search for property addresses using HCAD\nPDF OCR: Extract text from PDF files"
     )
     
     st.sidebar.markdown("---")
@@ -38,6 +39,7 @@ def main():
     This tool helps you:
     1. **Scrape** Harris County instrument data
     2. **Search** for property addresses using HCAD
+    3. **Extract text** from PDF files using OCR
     
     Make sure to complete Step 1 before running Step 2.
     """)
@@ -64,6 +66,9 @@ def main():
             run_app2(st.session_state.app1_results)
         else:
             st.warning("⚠️ Please complete Step 1 first to get instrument data.")
+    
+    elif choice == "PDF OCR Tool":
+        run_pdf_ocr_app()
 
 
 if __name__ == "__main__":

@@ -3,9 +3,18 @@ Configuration settings for the Harris County Property Scraper.
 """
 import os
 from typing import Dict, Any
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# Credentials from .env file
+HCTX_USERNAME = os.getenv("HCTX_USERNAME", "")
+HCTX_PASSWORD = os.getenv("HCTX_PASSWORD", "")
 
 # Harris County Scraper Configuration
 HARRIS_COUNTY_BASE_URL = "https://www.cclerk.hctx.net/applications/websearch/"
@@ -43,8 +52,8 @@ BROWSER_HEADERS = {
 }
 
 # File Paths
-INSTRUMENT_TYPES_FILE = "instrument_types.json"
-OUTPUT_EXCEL_FILE = "output.xlsx"
+INSTRUMENT_TYPES_FILE = Path(__file__).parent / "instrument_types.json"
+OUTPUT_EXCEL_FILE = Path(__file__).parent / "output.xlsx"
 
 # Timeout Settings
 REQUEST_TIMEOUT = 30
