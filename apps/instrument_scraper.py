@@ -24,17 +24,17 @@ class InstrumentScraperApp:
     def _load_instrument_types(self) -> Dict[str, str]:
         """Load instrument types from JSON file."""
         try:
-            logger.info(f"Loading instrument types from {INSTRUMENT_TYPES_FILE}")
+            logger.info(f"Loading instrument type definitions from {INSTRUMENT_TYPES_FILE}")
             with open(INSTRUMENT_TYPES_FILE, "r", encoding="utf-8") as f:
                 types = json.load(f)
-            logger.info(f"Successfully loaded {len(types)} instrument types")
+            logger.info(f"Successfully loaded {len(types)} instrument type definitions from configuration file")
             return types
         except FileNotFoundError:
-            logger.error(f"Instrument types file not found: {INSTRUMENT_TYPES_FILE}")
+            logger.error(f"Configuration file not found: {INSTRUMENT_TYPES_FILE} - application cannot function without instrument types")
             st.error(f"Instrument types file not found: {INSTRUMENT_TYPES_FILE}")
             return {}
         except json.JSONDecodeError as e:
-            logger.error(f"Error parsing instrument types file: {e}")
+            logger.error(f"Invalid JSON format in instrument types file: {e} - file may be corrupted")
             st.error(f"Error parsing instrument types file: {e}")
             return {}
     
@@ -81,7 +81,7 @@ class InstrumentScraperApp:
         
         # Run Button
         if st.button("Start Scraping", type="primary") and instrument_keys:
-            logger.info(f"Starting scraping for {len(instrument_keys)} instrument types: {instrument_keys}")
+            logger.info(f"User initiated scraping operation for {len(instrument_keys)} instrument types: {instrument_keys}")
             with st.spinner("Scraping instrument data..."):
                 # Group keys by code (avoid scraping duplicates)
                 code_to_keys = {}
@@ -89,29 +89,30 @@ class InstrumentScraperApp:
                     code = self.instrument_types[key]
                     code_to_keys.setdefault(code, []).append(key)
                 
-                logger.info(f"Grouped into {len(code_to_keys)} unique codes to scrape")
+                logger.info(f"Optimized scraping plan: {len(code_to_keys)} unique instrument codes to scrape (avoiding duplicates)")
                 all_results = []
                 progress_bar = st.progress(0)
                 total_codes = len(code_to_keys)
                 
                 for i, (code, keys) in enumerate(code_to_keys.items()):
-                    logger.info(f"Scraping code {code} for keys: {keys}")
+                    logger.info(f"Processing instrument code '{code}' for types: {keys} ({i+1}/{total_codes})")
                     st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
                     
                     df = get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         df["Instrument Type"] = ", ".join(keys)
                         all_results.append(df)
-                        logger.info(f"Successfully scraped {len(df)} records for code {code}")
+                        logger.info(f"Successfully scraped {len(df)} records for code '{code}' - added to results")
                         st.success(f"Found {len(df)} records")
                     else:
-                        logger.warning(f"No data found for code {code}")
+                        logger.warning(f"No records found for instrument code '{code}' in date range {start_date} to {end_date}")
                         st.info("No data found for this instrument type")
                     
                     progress_bar.progress((i + 1) / total_codes)
                 
                 if all_results:
                     final_df = pd.concat(all_results, ignore_index=True)
+                    logger.info(f"Scraping operation completed successfully - total records collected: {len(final_df)}")
                     st.success(f"✅ Scraping completed! Total records: {len(final_df)}")
                     
                     # Display results
@@ -120,13 +121,16 @@ class InstrumentScraperApp:
                     
                     # Download button
                     csv = final_df.to_csv(index=False)
+                    filename = f"instrument_data_{start_date}_{end_date}.csv"
+                    logger.info(f"Prepared CSV download file: {filename} ({len(csv)} bytes)")
                     st.download_button(
                         label="Download CSV",
                         data=csv,
-                        file_name=f"instrument_data_{start_date}_{end_date}.csv",
+                        file_name=filename,
                         mime="text/csv"
                     )
                 else:
+                    logger.warning("Scraping operation completed but no data was found for any selected instrument types")
                     st.info("No data found for selected instrument types.")
         
         return final_df

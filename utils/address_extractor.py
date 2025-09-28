@@ -28,7 +28,7 @@ class AddressExtractor:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY in .env file or pass api_key parameter.")
         
         self.client = OpenAI(api_key=self.api_key)
-        logger.info("Address extractor initialized with OpenAI API")
+        logger.info("Address extractor initialized successfully with OpenAI API client")
     
     def extract_addresses(self, text: str, context: str = "legal document") -> List[Dict[str, str]]:
         """
@@ -42,6 +42,7 @@ class AddressExtractor:
             List of dictionaries with extracted address information
         """
         try:
+            logger.info(f"Starting address extraction from {context} text ({len(text)} characters)")
             prompt = self._create_extraction_prompt(text, context)
             
             response = self.client.chat.completions.create(
@@ -57,11 +58,11 @@ class AddressExtractor:
             result = response.choices[0].message.content
             addresses = self._parse_response(result)
             
-            logger.info(f"Extracted {len(addresses)} addresses from text")
+            logger.info(f"Address extraction completed successfully - found {len(addresses)} addresses using OpenAI GPT-4o-mini")
             return addresses
             
         except Exception as e:
-            logger.error(f"Error extracting addresses: {e}")
+            logger.error(f"Address extraction failed: {type(e).__name__}: {e}")
             return []
     
     def _get_system_prompt(self) -> str:
@@ -124,15 +125,19 @@ Please extract only GRANTEES addresses and return them in the specified JSON for
             if json_match:
                 json_str = json_match.group()
                 data = json.loads(json_str)
-                return data.get('addresses', [])
+                addresses = data.get('addresses', [])
+                logger.debug(f"Successfully parsed JSON response - extracted {len(addresses)} addresses")
+                return addresses
             else:
                 # Fallback: try to parse the entire response as JSON
                 data = json.loads(response)
-                return data.get('addresses', [])
+                addresses = data.get('addresses', [])
+                logger.debug(f"Successfully parsed full JSON response - extracted {len(addresses)} addresses")
+                return addresses
                 
         except json.JSONDecodeError as e:
-            logger.error(f"Error parsing JSON response: {e}")
-            logger.error(f"Response was: {response}")
+            logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+            logger.debug(f"Raw response content: {response[:500]}...")
             return []
     
     def extract_from_grantees(self, grantees_text: str) -> List[Dict[str, str]]:

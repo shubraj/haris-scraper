@@ -28,10 +28,10 @@ class PDFOCR:
         
         # Verify tesseract is available
         try:
-            pytesseract.get_tesseract_version()
-            logger.info("Tesseract OCR is available")
+            version = pytesseract.get_tesseract_version()
+            logger.info(f"Tesseract OCR engine initialized successfully - version: {version}")
         except Exception as e:
-            logger.error(f"Tesseract OCR not found: {e}")
+            logger.error(f"Tesseract OCR engine not found or not accessible: {e}")
             raise
     
     def pdf_to_images(self, pdf_path: str, dpi: int = 300) -> List[Image.Image]:
@@ -46,10 +46,12 @@ class PDFOCR:
             List of PIL Images
         """
         try:
+            logger.info(f"Starting PDF to image conversion: {pdf_path} at {dpi} DPI")
             # Open PDF in read-only mode to prevent any modifications
             doc = fitz.open(pdf_path)
             images = []
             
+            logger.info(f"PDF contains {len(doc)} pages - converting to images")
             for page_num in range(len(doc)):
                 page = doc.load_page(page_num)
                 # Convert page to image without modifying the original
@@ -58,13 +60,14 @@ class PDFOCR:
                 img_data = pix.tobytes("png")
                 img = Image.open(io.BytesIO(img_data))
                 images.append(img)
-                logger.info(f"Converted page {page_num + 1} to image")
+                logger.debug(f"Successfully converted page {page_num + 1}/{len(doc)} to image ({img.size[0]}x{img.size[1]} pixels)")
             
             doc.close()
+            logger.info(f"PDF to image conversion completed - generated {len(images)} images")
             return images
             
         except Exception as e:
-            logger.error(f"Error converting PDF to images: {e}")
+            logger.error(f"PDF to image conversion failed: {type(e).__name__}: {e}")
             raise
     
     def ocr_image(self, image: Image.Image, config: str = "--psm 6") -> str:
@@ -104,34 +107,47 @@ class PDFOCR:
             List of dictionaries with page info and extracted text
         """
         try:
-            logger.info(f"Starting OCR for PDF: {pdf_path}")
+            logger.info(f"Starting OCR processing for PDF: {pdf_path} (DPI: {dpi}, Config: {config})")
             
             # Verify PDF file exists and is readable
             if not os.path.exists(pdf_path):
                 raise FileNotFoundError(f"PDF file not found: {pdf_path}")
             
+            file_size = os.path.getsize(pdf_path)
+            logger.info(f"PDF file verified - size: {file_size:,} bytes")
+            
             # Convert PDF to images (this doesn't modify the original PDF)
             images = self.pdf_to_images(pdf_path, dpi)
             
             results = []
+            total_words = 0
+            total_chars = 0
+            
             for page_num, image in enumerate(images):
-                logger.info(f"Processing page {page_num + 1}/{len(images)}")
+                logger.info(f"Performing OCR on page {page_num + 1}/{len(images)}")
                 
                 # Perform OCR on this page
                 text = self.ocr_image(image, config)
                 
+                word_count = len(text.split())
+                char_count = len(text)
+                total_words += word_count
+                total_chars += char_count
+                
                 results.append({
                     'page_number': page_num + 1,
                     'text': text,
-                    'word_count': len(text.split()),
-                    'character_count': len(text)
+                    'word_count': word_count,
+                    'character_count': char_count
                 })
+                
+                logger.debug(f"Page {page_num + 1} OCR completed - {word_count} words, {char_count} characters")
             
-            logger.info(f"OCR completed for {len(images)} pages")
+            logger.info(f"OCR processing completed successfully - {len(images)} pages processed, {total_words:,} total words, {total_chars:,} total characters")
             return results
             
         except Exception as e:
-            logger.error(f"Error performing OCR on PDF: {e}")
+            logger.error(f"OCR processing failed for PDF {pdf_path}: {type(e).__name__}: {e}")
             raise
     
     def extract_text_by_region(self, pdf_path: str, page_num: int, 

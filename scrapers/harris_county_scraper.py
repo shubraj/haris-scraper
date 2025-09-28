@@ -40,7 +40,7 @@ class HarrisCountyScraper:
         # Initialize login and security params
         self.login()
         self.security_params = self._get_security_params()
-        logger.info("Harris County scraper initialized with session")
+        logger.info("Harris County scraper initialized successfully with session-based HTTP client")
     
     def _get_search_url(self) -> str:
         """Get the search URL for Harris County records."""
@@ -92,10 +92,10 @@ class HarrisCountyScraper:
             data=data
         )
         if response.url.endswith("/Applications/WebSearch/Home.aspx"):
-            logger.info("Login successful")
+            logger.info("Successfully authenticated with Harris County Clerk's website")
         else:
-            logger.error("Login failed")
-            raise Exception("Login failed")
+            logger.error(f"Authentication failed - unexpected redirect to: {response.url}")
+            raise Exception("Login failed - invalid credentials or network issue")
     
     def _prepare_search_data(self, instrument_type: str, start_date: str, end_date: str) -> Dict[str, str]:
         """
@@ -151,9 +151,10 @@ class HarrisCountyScraper:
             HTML response text or None if error
         """
         try:
-            logger.info(f"Searching for {instrument_type} records from {start_date} to {end_date}")
+            logger.info(f"Starting search for instrument type '{instrument_type}' from {start_date} to {end_date}")
             
             data = self._prepare_search_data(instrument_type, start_date, end_date)
+            logger.debug(f"Prepared search data with {len(data)} form fields")
             
             response = self.session.post(
                 self.search_url,
@@ -161,14 +162,14 @@ class HarrisCountyScraper:
             )
             
             response.raise_for_status()
-            logger.info(f"Successfully retrieved {instrument_type} records")
+            logger.info(f"Successfully retrieved search results for '{instrument_type}' - Status: {response.status_code}, Content-Length: {len(response.content)} bytes")
             return response.text
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error searching records: {e}")
+            logger.error(f"Network error during search for '{instrument_type}': {type(e).__name__}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error during search: {e}")
+            logger.error(f"Unexpected error during search for '{instrument_type}': {type(e).__name__}: {e}")
             return None
     
     def parse_html_response(self, html: str) -> pd.DataFrame:
@@ -187,19 +188,27 @@ class HarrisCountyScraper:
             
             # Find all result rows
             rows = soup.find_all("tr", class_=["odd", "even"])
-            logger.info(f"Found {len(rows)} result rows to parse")
+            logger.info(f"Found {len(rows)} result rows in HTML response to parse")
             
-            for row in rows:
+            if not rows:
+                logger.warning("No result rows found in HTML response - possible empty search results")
+                return pd.DataFrame()
+            
+            successful_parses = 0
+            for i, row in enumerate(rows):
                 record = self._parse_record_row(row)
                 if record:
                     data.append(record)
+                    successful_parses += 1
+                else:
+                    logger.debug(f"Failed to parse row {i+1}/{len(rows)}")
             
             df = pd.DataFrame(data)
-            logger.info(f"Successfully parsed {len(df)} records")
+            logger.info(f"Successfully parsed {successful_parses}/{len(rows)} records into DataFrame with {len(df.columns)} columns")
             return df
             
         except Exception as e:
-            logger.error(f"Error parsing HTML response: {e}")
+            logger.error(f"Error parsing HTML response: {type(e).__name__}: {e}")
             return pd.DataFrame()
     
     def _parse_record_row(self, row) -> Optional[Dict[str, str]]:
@@ -337,26 +346,26 @@ class HarrisCountyScraper:
             DataFrame containing scraped records
         """
         try:
-            logger.info(f"Starting scrape for {instrument_type} from {start_date} to {end_date}")
+            logger.info(f"Starting complete scrape operation for instrument type '{instrument_type}' from {start_date} to {end_date}")
             
             # Search for records
             html = self.search_records(instrument_type, start_date, end_date)
             if not html:
-                logger.warning("No HTML response received")
+                logger.warning(f"No HTML response received for '{instrument_type}' - search may have failed")
                 return pd.DataFrame()
             
             # Parse the response
             df = self.parse_html_response(html)
             
             if df.empty:
-                logger.warning("No records found")
+                logger.warning(f"No records found for instrument type '{instrument_type}' in date range {start_date} to {end_date}")
             else:
-                logger.info(f"Successfully scraped {len(df)} records")
+                logger.info(f"Scrape operation completed successfully - found {len(df)} records for '{instrument_type}'")
             
             return df
             
         except Exception as e:
-            logger.error(f"Error in scrape_records: {e}")
+            logger.error(f"Scrape operation failed for '{instrument_type}': {type(e).__name__}: {e}")
             return pd.DataFrame()
     
     def get_available_instrument_types(self) -> List[str]:
@@ -407,7 +416,7 @@ class HarrisCountyScraper:
         """Close the requests session."""
         if hasattr(self, 'session'):
             self.session.close()
-            logger.info("Session closed")
+            logger.info("HTTP session closed successfully")
     
     def __del__(self):
         """Cleanup when object is destroyed."""
@@ -430,7 +439,7 @@ def close_scraper():
     if _scraper_instance is not None:
         _scraper_instance.close_session()
         _scraper_instance = None
-        logger.info("Global scraper instance closed")
+        logger.info("Global scraper singleton instance closed and reset")
 
 # Backward compatibility functions using single instance
 def get_html_table(instrument_type: str, starting_date: str, ending_date: str) -> str:
