@@ -1,7 +1,35 @@
 #!/bin/bash
 set -e
-# ensure pip is up-to-date (optional but safe)
+
+echo "🚀 Starting Streamlit Cloud deployment setup..."
+
+# Ensure pip is up-to-date
+echo "📦 Upgrading pip..."
 python -m pip install --upgrade pip
 
-# Download Playwright browser binaries (Chromium). This must run AFTER pip installs.
+# Install Playwright browser binaries
+echo "🌐 Installing Playwright browsers..."
 python -m playwright install chromium
+python -m playwright install-deps chromium
+
+# Verify Tesseract installation
+echo "🔍 Verifying Tesseract OCR installation..."
+tesseract --version || echo "⚠️  Tesseract not found, but continuing..."
+
+# Create necessary directories
+echo "📁 Creating application directories..."
+mkdir -p logs
+mkdir -p downloads
+mkdir -p temp
+
+# Set proper permissions
+echo "🔐 Setting permissions..."
+chmod 755 logs
+chmod 755 downloads
+chmod 755 temp
+
+# Verify Python packages
+echo "✅ Verifying Python packages..."
+python -c "import streamlit, requests, pandas, bs4, playwright, openai, fitz, pytesseract, PIL; print('All packages imported successfully')"
+
+echo "🎉 Streamlit Cloud deployment setup completed!"

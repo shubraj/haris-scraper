@@ -1,2 +1,51 @@
 #!/bin/bash
+set -e
+
+echo "🔧 Running post-installation setup..."
+
+# Install Playwright browsers (fallback)
+echo "🌐 Installing Playwright browsers..."
 playwright install chromium
+
+# Install system dependencies for Playwright
+echo "📋 Installing Playwright system dependencies..."
+playwright install-deps chromium
+
+# Verify installations
+echo "✅ Verifying installations..."
+python -c "
+import sys
+print(f'Python version: {sys.version}')
+
+try:
+    import streamlit as st
+    print(f'Streamlit version: {st.__version__}')
+except ImportError as e:
+    print(f'Streamlit import error: {e}')
+
+try:
+    import playwright
+    print(f'Playwright version: {playwright.__version__}')
+except ImportError as e:
+    print(f'Playwright import error: {e}')
+
+try:
+    import openai
+    print(f'OpenAI version: {openai.__version__}')
+except ImportError as e:
+    print(f'OpenAI import error: {e}')
+
+try:
+    import fitz
+    print(f'PyMuPDF version: {fitz.__version__}')
+except ImportError as e:
+    print(f'PyMuPDF import error: {e}')
+
+try:
+    import pytesseract
+    print('Tesseract OCR available')
+except ImportError as e:
+    print(f'Tesseract import error: {e}')
+"
+
+echo "🎉 Post-installation setup completed!"
