@@ -365,3 +365,27 @@ class HarrisCountyScraper:
         }
 
 
+# Global scraper instance for efficiency
+_scraper_instance = None
+
+def get_scraper() -> HarrisCountyScraper:
+    """Get the global scraper instance (singleton pattern)."""
+    global _scraper_instance
+    if _scraper_instance is None:
+        _scraper_instance = HarrisCountyScraper()
+    return _scraper_instance
+
+# Backward compatibility functions using single instance
+def get_html_table(instrument_type: str, starting_date: str, ending_date: str) -> str:
+    """Backward compatibility function."""
+    return get_scraper().search_records(instrument_type, starting_date, ending_date) or ""
+
+
+def parse_html_to_excel(html: str) -> pd.DataFrame:
+    """Backward compatibility function."""
+    return get_scraper().parse_html_response(html)
+
+
+def get_table(instrument_type: str, starting_date: str, ending_date: str) -> pd.DataFrame:
+    """Backward compatibility function."""
+    return get_scraper().scrape_records(instrument_type, starting_date, ending_date)
