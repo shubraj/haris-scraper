@@ -262,11 +262,18 @@ class HCADScraper:
 
             result = await self.run_search(page, owner, legal_desc_clean, legal_desc_full, first_run=first_run)
 
-            # Copy original row and add Address
-            row_with_address = row.copy()
-            row_with_address["Address"] = result["address"]
+            # Create standardized result format to match Step 2
+            standardized_result = {
+                'Grantor': row.get('Grantors', ''),
+                'Grantee': row.get('Grantees', ''),
+                'Instrument Type': row.get('DocType', ''),
+                'Recording Date': row.get('FileDate', ''),
+                'Film Code (Ref)': row.get('FilmCode', ''),
+                'Legal Description': row.get('LegalDescription', ''),
+                'Property Address': result["address"] or ''
+            }
 
-            results.append(row_with_address)
+            results.append(standardized_result)
             results_placeholder.dataframe(pd.DataFrame(results))
 
             first_run = False
