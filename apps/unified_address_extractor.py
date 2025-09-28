@@ -284,8 +284,7 @@ class UnifiedAddressExtractorApp:
             'Recording Date': original_record.get('FileDate', ''),
             'Film Code (Ref)': original_record.get('FilmCode', ''),
             'Legal Description': original_record.get('LegalDescription', ''),
-            'Property Address': property_address,
-            'Source': source
+            'Property Address': property_address
         }
     
     def _save_ocr_text_for_debugging(self, record_id: str, pdf_text: str, ocr_results: List[Dict]) -> None:
@@ -321,7 +320,7 @@ class UnifiedAddressExtractorApp:
     def _display_results(self, results_df: pd.DataFrame):
         """Display extraction results."""
         # Summary statistics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric("Total Records", len(results_df))
@@ -333,10 +332,6 @@ class UnifiedAddressExtractorApp:
         with col3:
             success_rate = (addresses_found / len(results_df)) * 100 if len(results_df) > 0 else 0
             st.metric("Success Rate", f"{success_rate:.1f}%")
-        
-        with col4:
-            pdf_count = len(results_df[results_df['Source'] == 'PDF extraction'])
-            st.metric("From PDFs", pdf_count)
         
         # Results table
         st.dataframe(results_df, width='stretch')
