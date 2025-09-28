@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 import tempfile
 import os
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from scrapers.harris_county_scraper import get_scraper
 from scrapers.hcad import run_hcad_searches
@@ -69,33 +70,8 @@ class UnifiedAddressExtractorApp:
         try:
             logger.info(f"Starting unified address extraction for {len(records_df)} records")
             
-            final_results = []
-            
-            # Process each record individually
-            for index, record in records_df.iterrows():
-                record_id = record.get('FileNo', f'record_{index}')
-                address_found = False
-                
-                # Step 1: Try PDF extraction if PDF available
-                if record.get('PdfUrl') and record.get('PdfUrl').strip():
-                    st.write(f"📄 Processing {record_id}: Trying PDF extraction...")
-                    pdf_address = self._try_pdf_extraction(record)
-                    if pdf_address:
-                        final_results.append(self._create_result_record(record, pdf_address, 'PDF extraction'))
-                        address_found = True
-                        st.write(f"✅ Found address in PDF: {pdf_address}")
-                
-                # Step 2: If no address from PDF, try HCAD
-                if not address_found:
-                    st.write(f"🔍 Processing {record_id}: Trying HCAD search...")
-                    hcad_address = asyncio.run(self._try_hcad_extraction(record))
-                    if hcad_address:
-                        final_results.append(self._create_result_record(record, hcad_address, 'HCAD'))
-                        address_found = True
-                        st.write(f"✅ Found address via HCAD: {hcad_address}")
-                
-                if not address_found:
-                    st.write(f"❌ No address found for {record_id}")
+            # Process records concurrently (5 at a time)
+            final_results = self._process_records_concurrent(records_df)
             
             if final_results:
                 final_df = pd.DataFrame(final_results)
@@ -110,7 +86,74 @@ class UnifiedAddressExtractorApp:
             st.error(f"Error processing records: {e}")
             return None
     
-    def _try_pdf_extraction(self, record: pd.Series) -> Optional[str]:
+    def _process_records_concurrent(self, records_df: pd.DataFrame) -> List[Dict]:
+        """Process records concurrently with 5 at a time using ThreadPoolExecutor."""
+        records_list = records_df.to_dict('records')
+        final_results = []
+        
+        # Process in batches of 5
+        batch_size = 5
+        total_batches = (len(records_list) + batch_size - 1) // batch_size
+        
+        for i in range(0, len(records_list), batch_size):
+            batch = records_list[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            
+            st.write(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch)} records)")
+            
+            # Process batch concurrently
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # Submit all tasks in the batch
+                future_to_record = {
+                    executor.submit(self._process_single_record, record): record 
+                    for record in batch
+                }
+                
+                # Collect results as they complete
+                for future in as_completed(future_to_record):
+                    record = future_to_record[future]
+                    try:
+                        result = future.result()
+                        if result:
+                            final_results.append(result)
+                            record_id = record.get('FileNo', 'unknown')
+                            address = result.get('Property Address', '')
+                            st.write(f"✅ {record_id}: Found address: {address}")
+                    except Exception as e:
+                        record_id = record.get('FileNo', 'unknown')
+                        logger.error(f"Error processing record {record_id}: {e}")
+                        st.write(f"❌ {record_id}: Error - {str(e)}")
+        
+        return final_results
+    
+    def _process_single_record(self, record: Dict) -> Optional[Dict]:
+        """Process a single record with PDF extraction and HCAD fallback."""
+        record_id = record.get('FileNo', 'unknown')
+        address_found = False
+        result = None
+        
+        # Step 1: Try PDF extraction if PDF available
+        if record.get('PdfUrl') and record.get('PdfUrl').strip():
+            pdf_address = self._try_pdf_extraction(record)
+            if pdf_address:
+                result = self._create_result_record(record, pdf_address, 'PDF extraction')
+                address_found = True
+                logger.info(f"✅ {record_id}: Found address in PDF: {pdf_address}")
+        
+        # Step 2: If no address from PDF, try HCAD
+        if not address_found:
+            hcad_address = asyncio.run(self._try_hcad_extraction(record))
+            if hcad_address:
+                result = self._create_result_record(record, hcad_address, 'HCAD')
+                address_found = True
+                logger.info(f"✅ {record_id}: Found address via HCAD: {hcad_address}")
+        
+        if not address_found:
+            logger.warning(f"❌ {record_id}: No address found")
+        
+        return result
+    
+    def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
         """Try to extract address from PDF for a single record."""
         try:
             # Download PDF
@@ -136,11 +179,11 @@ class UnifiedAddressExtractorApp:
             if 'pdf_path' in locals() and os.path.exists(pdf_path):
                 os.remove(pdf_path)
     
-    async def _try_hcad_extraction(self, record: pd.Series) -> Optional[str]:
+    async def _try_hcad_extraction(self, record: Dict) -> Optional[str]:
         """Try to extract address using HCAD for a single record."""
         try:
             # Create single record DataFrame
-            hcad_df = pd.DataFrame([record.to_dict()])
+            hcad_df = pd.DataFrame([record])
             
             # Clear previous results
             if 'hcad_results' in st.session_state:
@@ -248,7 +291,7 @@ class UnifiedAddressExtractorApp:
             logger.error(f"HCAD processing failed: {e}")
             return pd.DataFrame()
     
-    def _download_pdf(self, record: pd.Series) -> Optional[str]:
+    def _download_pdf(self, record: Dict) -> Optional[str]:
         """Download PDF for a record."""
         try:
             pdf_url = record.get('PdfUrl', '')
@@ -270,7 +313,7 @@ class UnifiedAddressExtractorApp:
             logger.error(f"Error downloading PDF: {e}")
             return None
     
-    def _create_result_record(self, original_record: pd.Series, property_address: str, source: str) -> Dict:
+    def _create_result_record(self, original_record: Dict, property_address: str, source: str) -> Dict:
         """Create a result record with extracted address."""
         return {
             'FileNo': original_record.get('FileNo', ''),
