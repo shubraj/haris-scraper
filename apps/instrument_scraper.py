@@ -7,7 +7,7 @@ import json
 from datetime import date
 from typing import Optional, Dict, Any
 
-from scrapers.harris_county_scraper import get_scraper
+from scrapers.harris_county_scraper import HarrisCountyScraper
 from config import INSTRUMENT_TYPES_FILE
 
 
@@ -16,6 +16,16 @@ class InstrumentScraperApp:
     
     def __init__(self):
         self.instrument_types = self._load_instrument_types()
+        self._init_session_state()
+    
+    def _init_session_state(self):
+        """Initialize session state for the scraper."""
+        if "harris_scraper" not in st.session_state:
+            st.session_state.harris_scraper = HarrisCountyScraper()
+    
+    def _get_scraper(self) -> HarrisCountyScraper:
+        """Get the scraper instance from session state."""
+        return st.session_state.harris_scraper
     
     def _load_instrument_types(self) -> Dict[str, str]:
         """Load instrument types from JSON file."""
@@ -86,7 +96,7 @@ class InstrumentScraperApp:
                 for i, (code, keys) in enumerate(code_to_keys.items()):
                     st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
                     
-                    df = get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
+                    df = self._get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         df["Instrument Type"] = ", ".join(keys)
                         all_results.append(df)

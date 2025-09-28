@@ -8,6 +8,7 @@ from typing import Optional, Dict, List, Tuple
 import logging
 from datetime import datetime
 from config import DEFAULT_HEADERS, HARRIS_COUNTY_BASE_URL, REQUEST_TIMEOUT
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +29,10 @@ class HarrisCountyScraper:
         self.headers = headers or DEFAULT_HEADERS.copy()
         self.timeout = timeout
         self.base_url = HARRIS_COUNTY_BASE_URL
+        self.HCTX_USERNAME = os.getenv("HCTX_USERNAME")
+        self.HCTX_PASSWORD = os.getenv("HCTX_PASSWORD")
         self.search_url = self._get_search_url()
+        self.login()
         self.security_params = self._get_security_params()
         logger.info("Harris County scraper initialized")
     
@@ -59,6 +63,41 @@ class HarrisCountyScraper:
             "__EVENTARGUMENT":soup.select_one("input#__EVENTARGUMENT").get("value") or "",
             "__EVENTTARGET":soup.select_one("input#__EVENTTARGET").get("value") or "",
         }
+
+    def login(self):
+        """Login to Harris County Clerk's website."""
+        response = requests.get(
+            "https://www.cclerk.hctx.net/Applications/WebSearch/Registration/Login.aspx",
+            headers=self.headers,
+            timeout=self.timeout
+        )
+        soup = BeautifulSoup(response.content,"html.parser")
+        data = {
+            "__EVENTTARGET":soup.select_one("input#__EVENTTARGET").get("value") or "",
+            "__EVENTARGUMENT":soup.select_one("input#__EVENTARGUMENT").get("value") or "",
+            "__VIEWSTATE":soup.select_one("input#__VIEWSTATE").get("value") or "",
+            "__VIEWSTATEGENERATOR":soup.select_one("input#__VIEWSTATEGENERATOR").get("value") or "",
+            "__VIEWSTATEENCRYPTED":soup.select_one("input#__VIEWSTATEENCRYPTED").get("value") or "",
+            "__EVENTVALIDATION":soup.select_one("input#__EVENTVALIDATION").get("value") or "",
+        }
+        data.update(
+            {
+            'ctl00$ContentPlaceHolder1$Login1$UserName': self.HCTX_USERNAME,
+            'ctl00$ContentPlaceHolder1$Login1$Password': self.HCTX_PASSWORD,
+            'ctl00$ContentPlaceHolder1$Login1$LoginButton': 'Log In',
+            }
+        )
+        response = requests.post(
+            "https://www.cclerk.hctx.net/Applications/WebSearch/Registration/Login.aspx",
+            headers=self.headers,
+            data=data,
+            timeout=self.timeout
+        )
+        if response.status_code == 302 and response.headers.get("Location") == "/Applications/WebSearch/Home.aspx":
+            logger.info("Login successful")
+        else:
+            logger.error("Login failed")
+            raise Exception("Login failed")
     
     def _prepare_search_data(self, instrument_type: str, start_date: str, end_date: str) -> Dict[str, str]:
         """
@@ -189,7 +228,6 @@ class HarrisCountyScraper:
             record["FileDate"] = self._safe_get_text(cells, 2)
             record["DocType"] = self._safe_get_text(cells, 3).split("\n")[0] if self._safe_get_text(cells, 3) else ""
             record["FilmCode"] = self._safe_get_text(cells, 7)
-            
             # Extract Grantors and Grantees
             if len(cells) > 4:
                 grantors, grantees = self._extract_parties(cells[4])
@@ -205,12 +243,19 @@ class HarrisCountyScraper:
             else:
                 record["LegalDescription"] = ""
             
-            # Extract Pages
             if len(cells) >= 2:
-                record["Pages"] = self._safe_get_text(cells, -2)
+                record["Pages"] = self._safe_get_text(cells,-2)
             else:
                 record["Pages"] = ""
-            
+
+
+            record["PdfUrl"] = ""
+            if record["FilmCode"]:
+                pdfUrl = cells[7].select_one("a").get("href") or ""
+                if pdfUrl:
+                    record["PdfUrl"] = f"https://www.cclerk.hctx.net/Applications/WebSearch/{pdfUrl}"
+               
+
             return record
             
         except Exception as e:
@@ -220,9 +265,7 @@ class HarrisCountyScraper:
     def _safe_get_text(self, cells: List, index: int) -> str:
         """Safely get text from cell at index."""
         try:
-            if 0 <= index < len(cells):
-                return cells[index].get_text(strip=True)
-            return ""
+            return cells[index].get_text(strip=True) or ""
         except Exception:
             return ""
     
@@ -365,27 +408,20 @@ class HarrisCountyScraper:
         }
 
 
-# Global scraper instance for efficiency
-_scraper_instance = None
-
-def get_scraper() -> HarrisCountyScraper:
-    """Get the global scraper instance (singleton pattern)."""
-    global _scraper_instance
-    if _scraper_instance is None:
-        _scraper_instance = HarrisCountyScraper()
-    return _scraper_instance
-
-# Backward compatibility functions using single instance
+# Backward compatibility functions - these will be replaced by session state usage
 def get_html_table(instrument_type: str, starting_date: str, ending_date: str) -> str:
-    """Backward compatibility function."""
-    return get_scraper().search_records(instrument_type, starting_date, ending_date) or ""
+    """Backward compatibility function - use session state in Streamlit apps."""
+    scraper = HarrisCountyScraper()
+    return scraper.search_records(instrument_type, starting_date, ending_date) or ""
 
 
 def parse_html_to_excel(html: str) -> pd.DataFrame:
-    """Backward compatibility function."""
-    return get_scraper().parse_html_response(html)
+    """Backward compatibility function - use session state in Streamlit apps."""
+    scraper = HarrisCountyScraper()
+    return scraper.parse_html_response(html)
 
 
 def get_table(instrument_type: str, starting_date: str, ending_date: str) -> pd.DataFrame:
-    """Backward compatibility function."""
-    return get_scraper().scrape_records(instrument_type, starting_date, ending_date)
+    """Backward compatibility function - use session state in Streamlit apps."""
+    scraper = HarrisCountyScraper()
+    return scraper.scrape_records(instrument_type, starting_date, ending_date)

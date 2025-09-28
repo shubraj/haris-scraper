@@ -228,6 +228,19 @@ Please extract only GRANTEES addresses and return them in the specified JSON for
         return results
 
 
+def get_address_extractor(api_key: Optional[str] = None) -> AddressExtractor:
+    """
+    Get address extractor instance (for use with session state).
+    
+    Args:
+        api_key: OpenAI API key (optional)
+        
+    Returns:
+        AddressExtractor instance
+    """
+    return AddressExtractor(api_key)
+
+
 def extract_addresses_from_text(text: str, api_key: Optional[str] = None) -> List[Dict[str, str]]:
     """
     Convenience function to extract addresses from text.
