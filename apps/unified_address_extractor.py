@@ -69,62 +69,33 @@ class UnifiedAddressExtractorApp:
         try:
             logger.info(f"Starting unified address extraction for {len(records_df)} records")
             
-            # Step 1: Try PDF extraction for records with PDFs
-            pdf_records = records_df[records_df['PdfUrl'].notna() & (records_df['PdfUrl'] != '')]
-            hcad_records = records_df[records_df['PdfUrl'].isna() | (records_df['PdfUrl'] == '')]
-            
-            st.write(f"📄 **Step 1: PDF Extraction** - Processing {len(pdf_records)} records with PDFs")
-            pdf_results = self._process_pdf_records(pdf_records)
-            
-            # Step 2: Identify records that need HCAD fallback
-            records_needing_hcad = []
-            
-            # Add records that didn't have PDFs (always need HCAD)
-            for _, record in hcad_records.iterrows():
-                records_needing_hcad.append(record.to_dict())
-            
-            # Add records where PDF extraction didn't find addresses
-            if pdf_results is not None and not pdf_results.empty:
-                for _, pdf_record in pdf_results.iterrows():
-                    if not pdf_record.get('Property Address', '').strip():
-                        # Find original record for HCAD search
-                        file_no = pdf_record.get('FileNo', '')
-                        if file_no:
-                            original_record = records_df[records_df['FileNo'] == file_no]
-                            if not original_record.empty:
-                                records_needing_hcad.append(original_record.iloc[0].to_dict())
-            else:
-                # If PDF processing failed completely, use all PDF records for HCAD
-                for _, record in pdf_records.iterrows():
-                    records_needing_hcad.append(record.to_dict())
-            
-            if records_needing_hcad:
-                st.write(f"🔍 **Step 2: HCAD Search** - Processing {len(records_needing_hcad)} records")
-                hcad_results = asyncio.run(self._process_hcad_records(records_needing_hcad))
-            else:
-                hcad_results = pd.DataFrame()
-            
-            # Combine results intelligently - only show records with addresses
             final_results = []
             
-            # Add PDF results that have addresses
-            if pdf_results is not None and not pdf_results.empty:
-                for _, pdf_record in pdf_results.iterrows():
-                    if pdf_record.get('Property Address', '').strip():
-                        final_results.append(pdf_record.to_dict())
-            
-            # Add HCAD results that have addresses
-            if not hcad_results.empty:
-                logger.info(f"Processing {len(hcad_results)} HCAD results")
-                for _, hcad_record in hcad_results.iterrows():
-                    address = hcad_record.get('Property Address', '')
-                    if address and address.strip():
-                        logger.info(f"Adding HCAD result with address: {address}")
-                        final_results.append(hcad_record.to_dict())
-                    else:
-                        logger.debug(f"Skipping HCAD result with empty address: {hcad_record.get('FileNo', 'unknown')}")
-            else:
-                logger.warning("No HCAD results to process")
+            # Process each record individually
+            for index, record in records_df.iterrows():
+                record_id = record.get('FileNo', f'record_{index}')
+                address_found = False
+                
+                # Step 1: Try PDF extraction if PDF available
+                if record.get('PdfUrl') and record.get('PdfUrl').strip():
+                    st.write(f"📄 Processing {record_id}: Trying PDF extraction...")
+                    pdf_address = self._try_pdf_extraction(record)
+                    if pdf_address:
+                        final_results.append(self._create_result_record(record, pdf_address, 'PDF extraction'))
+                        address_found = True
+                        st.write(f"✅ Found address in PDF: {pdf_address}")
+                
+                # Step 2: If no address from PDF, try HCAD
+                if not address_found:
+                    st.write(f"🔍 Processing {record_id}: Trying HCAD search...")
+                    hcad_address = asyncio.run(self._try_hcad_extraction(record))
+                    if hcad_address:
+                        final_results.append(self._create_result_record(record, hcad_address, 'HCAD'))
+                        address_found = True
+                        st.write(f"✅ Found address via HCAD: {hcad_address}")
+                
+                if not address_found:
+                    st.write(f"❌ No address found for {record_id}")
             
             if final_results:
                 final_df = pd.DataFrame(final_results)
@@ -137,6 +108,61 @@ class UnifiedAddressExtractorApp:
         except Exception as e:
             logger.error(f"Unified address extraction failed: {e}")
             st.error(f"Error processing records: {e}")
+            return None
+    
+    def _try_pdf_extraction(self, record: pd.Series) -> Optional[str]:
+        """Try to extract address from PDF for a single record."""
+        try:
+            # Download PDF
+            pdf_path = self._download_pdf(record)
+            if not pdf_path:
+                return None
+            
+            # Extract text and addresses
+            ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
+            pdf_text = " ".join([page['text'] for page in ocr_results])
+            
+            # Store OCR text for debugging
+            record_id = record.get('FileNo', 'unknown')
+            self._save_ocr_text_for_debugging(record_id, pdf_text, ocr_results)
+            
+            if pdf_text.strip():
+                addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
+                if addresses:
+                    return self.address_extractor.standardize_address(addresses[0])
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"PDF extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
+            return None
+        finally:
+            if 'pdf_path' in locals() and os.path.exists(pdf_path):
+                os.remove(pdf_path)
+    
+    async def _try_hcad_extraction(self, record: pd.Series) -> Optional[str]:
+        """Try to extract address using HCAD for a single record."""
+        try:
+            # Create single record DataFrame
+            hcad_df = pd.DataFrame([record.to_dict()])
+            
+            # Clear previous results
+            if 'hcad_results' in st.session_state:
+                del st.session_state.hcad_results
+            
+            # Run HCAD search
+            results_placeholder = st.empty()
+            await run_hcad_searches(hcad_df, results_placeholder)
+            
+            # Get result
+            if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
+                hcad_result = st.session_state.hcad_results.iloc[0]
+                return hcad_result.get('Property Address', '') or None
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"HCAD extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
             return None
     
     def _process_pdf_records(self, pdf_records: pd.DataFrame) -> Optional[pd.DataFrame]:
