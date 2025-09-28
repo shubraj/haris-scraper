@@ -188,8 +188,7 @@ class PDFAddressExtractorApp:
             'Recording Date': original_record.get('FileDate', ''),
             'Film Code (Ref)': original_record.get('FilmCode', ''),
             'Legal Description': original_record.get('LegalDescription', ''),
-            'Property Address': property_address or 'Not found',
-            'Extraction Status': status
+            'Property Address': property_address or ''
         }
     
     def _display_results(self, results_df: pd.DataFrame):
@@ -201,7 +200,7 @@ class PDFAddressExtractorApp:
             st.metric("Total Records", len(results_df))
         
         with col2:
-            addresses_found = len(results_df[results_df['Property Address'] != 'Not found'])
+            addresses_found = len(results_df[results_df['Property Address'] != ''])
             st.metric("Addresses Found", addresses_found)
         
         with col3:
@@ -209,17 +208,22 @@ class PDFAddressExtractorApp:
             st.metric("Success Rate", f"{success_rate:.1f}%")
         
         with col4:
-            failed = len(results_df[results_df['Property Address'] == 'Not found'])
+            failed = len(results_df[results_df['Property Address'] == ''])
             st.metric("Not Found", failed)
         
         # Results table
         st.dataframe(results_df, use_container_width=True)
         
-        # Status breakdown
-        if 'Extraction Status' in results_df.columns:
-            st.write("### 📊 Status Breakdown")
-            status_counts = results_df['Extraction Status'].value_counts()
-            st.bar_chart(status_counts)
+        # Address extraction summary
+        st.write("### 📊 Address Extraction Summary")
+        empty_addresses = len(results_df[results_df['Property Address'] == ''])
+        found_addresses = len(results_df[results_df['Property Address'] != ''])
+        
+        summary_data = pd.DataFrame({
+            'Status': ['Addresses Found', 'No Address Found'],
+            'Count': [found_addresses, empty_addresses]
+        })
+        st.bar_chart(summary_data.set_index('Status'))
     
     def _download_results(self, results_df: pd.DataFrame):
         """Provide download option for results."""
