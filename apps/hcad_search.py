@@ -91,7 +91,7 @@ class HCADSearchApp:
             st.info("Click 'Run HCAD Searches' to start the property search process.")
 
 
-def run_app2(df: Optional[pd.DataFrame]) -> None:
+def run_app2_hcad(df: Optional[pd.DataFrame]) -> None:
     """
     Convenience function to run the HCAD search app.
     
