@@ -89,80 +89,134 @@ class UnifiedAddressExtractorApp:
             return None
     
     def _process_records_concurrent(self, records_df: pd.DataFrame) -> List[Dict]:
-        """Process records concurrently with 5 at a time using ThreadPoolExecutor."""
+        """Process records with optimized PDF + HCAD batching."""
         records_list = records_df.to_dict('records')
         final_results = []
+        hcad_records = []
+        
+        # Step 1: Process PDFs concurrently (5 at a time)
+        st.write("📄 **Step 1: PDF Extraction**")
+        pdf_results = self._process_pdfs_concurrent(records_list)
+        
+        # Add successful PDF results
+        for result in pdf_results:
+            if result:
+                final_results.append(result)
+        
+        # Step 2: Collect records that need HCAD (no PDF or no address found)
+        for record in records_list:
+            record_id = record.get('FileNo', 'unknown')
+            # Check if this record was processed by PDF and found an address
+            pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
+            if not pdf_result or not pdf_result.get('Property Address', '').strip():
+                hcad_records.append(record)
+        
+        # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
+        if hcad_records:
+            st.write(f"🔍 **Step 2: HCAD Search** - Processing {len(hcad_records)} records")
+            hcad_results = asyncio.run(self._process_hcad_batch(hcad_records))
+            
+            # Add successful HCAD results
+            for result in hcad_results:
+                if result:
+                    final_results.append(result)
+        
+        return final_results
+    
+    def _process_pdfs_concurrent(self, records_list: List[Dict]) -> List[Optional[Dict]]:
+        """Process PDFs concurrently with 5 at a time using ThreadPoolExecutor."""
+        pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
+        
+        if not pdf_records:
+            return []
         
         # Process in batches of 5
         batch_size = 5
-        total_batches = (len(records_list) + batch_size - 1) // batch_size
+        total_batches = (len(pdf_records) + batch_size - 1) // batch_size
+        all_results = []
         
         # Create progress bar
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        for i in range(0, len(records_list), batch_size):
-            batch = records_list[i:i + batch_size]
+        for i in range(0, len(pdf_records), batch_size):
+            batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
-            status_text.text(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch)} records)")
+            status_text.text(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} records)")
             
             # Process batch concurrently
             with ThreadPoolExecutor(max_workers=5) as executor:
                 # Submit all tasks in the batch
                 future_to_record = {
-                    executor.submit(self._process_single_record, record): record 
+                    executor.submit(self._try_pdf_extraction, record): record 
                     for record in batch
                 }
                 
                 # Collect results as they complete
+                batch_results = []
                 for future in as_completed(future_to_record):
                     record = future_to_record[future]
                     try:
-                        result = future.result()
-                        if result:
-                            final_results.append(result)
-                            record_id = record.get('FileNo', 'unknown')
-                            address = result.get('Property Address', '')
-                            logger.info(f"✅ {record_id}: Found address: {address}")
+                        pdf_address = future.result()
+                        if pdf_address:
+                            result = self._create_result_record(record, pdf_address, 'PDF extraction')
+                            batch_results.append(result)
+                            logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
+                        else:
+                            batch_results.append(None)
                     except Exception as e:
                         record_id = record.get('FileNo', 'unknown')
-                        logger.error(f"Error processing record {record_id}: {e}")
+                        logger.error(f"Error processing PDF for record {record_id}: {e}")
+                        batch_results.append(None)
+                
+                all_results.extend(batch_results)
             
             # Update progress bar
             progress_bar.progress(batch_num / total_batches)
         
         # Clear status text
-        status_text.text("✅ Processing completed!")
+        status_text.text("✅ PDF processing completed!")
         
-        return final_results
+        return all_results
     
-    def _process_single_record(self, record: Dict) -> Optional[Dict]:
-        """Process a single record with PDF extraction and HCAD fallback."""
-        record_id = record.get('FileNo', 'unknown')
-        address_found = False
-        result = None
+    async def _process_hcad_batch(self, hcad_records: List[Dict]) -> List[Optional[Dict]]:
+        """Process HCAD records in batches to utilize HCAD's 5 tabs efficiently."""
+        if not hcad_records:
+            return []
         
-        # Step 1: Try PDF extraction if PDF available
-        if record.get('PdfUrl') and record.get('PdfUrl').strip():
-            pdf_address = self._try_pdf_extraction(record)
-            if pdf_address:
-                result = self._create_result_record(record, pdf_address, 'PDF extraction')
-                address_found = True
-                logger.info(f"✅ {record_id}: Found address in PDF: {pdf_address}")
+        # Process in batches of 10 (HCAD can handle more than 5 with its internal tabs)
+        batch_size = 10
+        all_results = []
         
-        # Step 2: If no address from PDF, try HCAD
-        if not address_found:
-            hcad_address = asyncio.run(self._try_hcad_extraction(record))
-            if hcad_address:
-                result = self._create_result_record(record, hcad_address, 'HCAD')
-                address_found = True
-                logger.info(f"✅ {record_id}: Found address via HCAD: {hcad_address}")
+        for i in range(0, len(hcad_records), batch_size):
+            batch = hcad_records[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (len(hcad_records) + batch_size - 1) // batch_size
+            
+            st.write(f"🔍 Processing HCAD batch {batch_num}/{total_batches} ({len(batch)} records)")
+            
+            # Create DataFrame for this batch
+            hcad_df = pd.DataFrame(batch)
+            
+            # Clear previous results
+            if 'hcad_results' in st.session_state:
+                del st.session_state.hcad_results
+            
+            # Run HCAD search for this batch
+            results_placeholder = st.empty()
+            await run_hcad_searches(hcad_df, results_placeholder)
+            
+            # Get results
+            if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
+                batch_results = st.session_state.hcad_results.to_dict('records')
+                all_results.extend(batch_results)
+                logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
+            else:
+                logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
         
-        if not address_found:
-            logger.warning(f"❌ {record_id}: No address found")
-        
-        return result
+        return all_results
+    
     
     def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
         """Try to extract address from PDF for a single record."""
@@ -190,30 +244,6 @@ class UnifiedAddressExtractorApp:
             if 'pdf_path' in locals() and os.path.exists(pdf_path):
                 os.remove(pdf_path)
     
-    async def _try_hcad_extraction(self, record: Dict) -> Optional[str]:
-        """Try to extract address using HCAD for a single record."""
-        try:
-            # Create single record DataFrame
-            hcad_df = pd.DataFrame([record])
-            
-            # Clear previous results
-            if 'hcad_results' in st.session_state:
-                del st.session_state.hcad_results
-            
-            # Run HCAD search
-            results_placeholder = st.empty()
-            await run_hcad_searches(hcad_df, results_placeholder)
-            
-            # Get result
-            if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
-                hcad_result = st.session_state.hcad_results.iloc[0]
-                return hcad_result.get('Property Address', '') or None
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"HCAD extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
-            return None
     
     def _process_pdf_records(self, pdf_records: pd.DataFrame) -> Optional[pd.DataFrame]:
         """Process records with PDFs for address extraction."""
