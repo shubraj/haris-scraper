@@ -130,8 +130,8 @@ class UnifiedAddressExtractorApp:
         if not pdf_records:
             return []
         
-        # Process in batches of 5
-        batch_size = 5
+        # Process in batches of 2 (reduced for OpenAI rate limits)
+        batch_size = 2
         total_batches = (len(pdf_records) + batch_size - 1) // batch_size
         all_results = []
         
@@ -145,8 +145,8 @@ class UnifiedAddressExtractorApp:
             
             status_text.text(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} records)")
             
-            # Process batch concurrently
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            # Process batch concurrently (reduced to 2 workers for OpenAI rate limits)
+            with ThreadPoolExecutor(max_workers=2) as executor:
                 # Submit all tasks in the batch
                 future_to_record = {
                     executor.submit(self._try_pdf_extraction, record): record 
@@ -174,6 +174,11 @@ class UnifiedAddressExtractorApp:
             
             # Update progress bar
             progress_bar.progress(batch_num / total_batches)
+            
+            # Small delay between batches to avoid OpenAI rate limits
+            if batch_num < total_batches:
+                import time
+                time.sleep(1)  # 1 second delay between batches
         
         # Clear status text
         status_text.text("✅ PDF processing completed!")
@@ -238,7 +243,11 @@ class UnifiedAddressExtractorApp:
             return None
             
         except Exception as e:
-            logger.error(f"PDF extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
+            error_msg = str(e).lower()
+            if 'rate limit' in error_msg or 'too many requests' in error_msg:
+                logger.warning(f"OpenAI rate limit hit for record {record.get('FileNo', 'unknown')}: {e}")
+            else:
+                logger.error(f"PDF extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
             return None
         finally:
             if 'pdf_path' in locals() and os.path.exists(pdf_path):
