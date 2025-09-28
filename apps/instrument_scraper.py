@@ -7,8 +7,12 @@ import json
 from datetime import date
 from typing import Optional, Dict, Any
 
-from scrapers.harris_county_scraper import HarrisCountyScraper
+from scrapers.harris_county_scraper import get_scraper
 from config import INSTRUMENT_TYPES_FILE
+from utils.logger_config import get_app_logger
+
+# Configure logging
+logger = get_app_logger()
 
 
 class InstrumentScraperApp:
@@ -16,26 +20,21 @@ class InstrumentScraperApp:
     
     def __init__(self):
         self.instrument_types = self._load_instrument_types()
-        self._init_session_state()
-    
-    def _init_session_state(self):
-        """Initialize session state for the scraper."""
-        if "harris_scraper" not in st.session_state:
-            st.session_state.harris_scraper = HarrisCountyScraper()
-    
-    def _get_scraper(self) -> HarrisCountyScraper:
-        """Get the scraper instance from session state."""
-        return st.session_state.harris_scraper
     
     def _load_instrument_types(self) -> Dict[str, str]:
         """Load instrument types from JSON file."""
         try:
+            logger.info(f"Loading instrument types from {INSTRUMENT_TYPES_FILE}")
             with open(INSTRUMENT_TYPES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                types = json.load(f)
+            logger.info(f"Successfully loaded {len(types)} instrument types")
+            return types
         except FileNotFoundError:
+            logger.error(f"Instrument types file not found: {INSTRUMENT_TYPES_FILE}")
             st.error(f"Instrument types file not found: {INSTRUMENT_TYPES_FILE}")
             return {}
         except json.JSONDecodeError as e:
+            logger.error(f"Error parsing instrument types file: {e}")
             st.error(f"Error parsing instrument types file: {e}")
             return {}
     
@@ -82,6 +81,7 @@ class InstrumentScraperApp:
         
         # Run Button
         if st.button("Start Scraping", type="primary") and instrument_keys:
+            logger.info(f"Starting scraping for {len(instrument_keys)} instrument types: {instrument_keys}")
             with st.spinner("Scraping instrument data..."):
                 # Group keys by code (avoid scraping duplicates)
                 code_to_keys = {}
@@ -89,19 +89,23 @@ class InstrumentScraperApp:
                     code = self.instrument_types[key]
                     code_to_keys.setdefault(code, []).append(key)
                 
+                logger.info(f"Grouped into {len(code_to_keys)} unique codes to scrape")
                 all_results = []
                 progress_bar = st.progress(0)
                 total_codes = len(code_to_keys)
                 
                 for i, (code, keys) in enumerate(code_to_keys.items()):
+                    logger.info(f"Scraping code {code} for keys: {keys}")
                     st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
                     
-                    df = self._get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
+                    df = get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         df["Instrument Type"] = ", ".join(keys)
                         all_results.append(df)
+                        logger.info(f"Successfully scraped {len(df)} records for code {code}")
                         st.success(f"Found {len(df)} records")
                     else:
+                        logger.warning(f"No data found for code {code}")
                         st.info("No data found for this instrument type")
                     
                     progress_bar.progress((i + 1) / total_codes)

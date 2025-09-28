@@ -6,12 +6,11 @@ import re
 import json
 from typing import List, Dict, Optional, Tuple
 from openai import OpenAI
-import logging
 from config import OPENAI_API_KEY
+from utils.logger_config import get_utils_logger
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_utils_logger()
 
 
 class AddressExtractor:
@@ -226,19 +225,6 @@ Please extract only GRANTEES addresses and return them in the specified JSON for
             addresses = self.extract_addresses(text, context)
             results.append(addresses)
         return results
-
-
-def get_address_extractor(api_key: Optional[str] = None) -> AddressExtractor:
-    """
-    Get address extractor instance (for use with session state).
-    
-    Args:
-        api_key: OpenAI API key (optional)
-        
-    Returns:
-        AddressExtractor instance
-    """
-    return AddressExtractor(api_key)
 
 
 def extract_addresses_from_text(text: str, api_key: Optional[str] = None) -> List[Dict[str, str]]:

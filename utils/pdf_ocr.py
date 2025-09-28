@@ -7,11 +7,10 @@ import pytesseract
 from PIL import Image
 import io
 from typing import List, Dict, Optional, Tuple
-import logging
+from utils.logger_config import get_utils_logger
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_utils_logger()
 
 
 class PDFOCR:

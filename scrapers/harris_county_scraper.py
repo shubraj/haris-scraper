@@ -5,14 +5,13 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 from typing import Optional, Dict, List, Tuple
-import logging
 from datetime import datetime
 from config import DEFAULT_HEADERS, HARRIS_COUNTY_BASE_URL, REQUEST_TIMEOUT
 import os
+from utils.logger_config import get_scraper_logger
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_scraper_logger()
 
 
 class HarrisCountyScraper:
@@ -92,7 +91,7 @@ class HarrisCountyScraper:
             "https://www.cclerk.hctx.net/Applications/WebSearch/Registration/Login.aspx",
             data=data
         )
-        if response.status_code == 302 and response.headers.get("Location") == "/Applications/WebSearch/Home.aspx":
+        if response.url.endswith("/Applications/WebSearch/Home.aspx"):
             logger.info("Login successful")
         else:
             logger.error("Login failed")
