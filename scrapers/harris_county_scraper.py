@@ -39,13 +39,8 @@ class HarrisCountyScraper:
         self.session.timeout = timeout
         
         # Initialize login and security params
-        self.security_params = {}
-        try:
-            self.login()
-            self.security_params = self._get_security_params()
-        except Exception as e:
-            logger.warning(f"Login failed or skipped: {e}")
-            # Continue without login for testing purposes
+        self.login()
+        self.security_params = self._get_security_params()
         logger.info("Harris County scraper initialized with session")
     
     def _get_search_url(self) -> str:
