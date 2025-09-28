@@ -43,8 +43,8 @@ class PDFAddressExtractorApp:
             st.warning("⚠️ No records available. Please complete Step 1 first.")
             return None
         
-        # Filter records that have FilmCode (PDF available)
-        pdf_records = records_df[records_df['FilmCode'].notna() & (records_df['FilmCode'] != '')]
+        # Filter records that have PdfUrl (PDF available)
+        pdf_records = records_df[records_df['PdfUrl'].notna() & (records_df['PdfUrl'] != '')]
         
         if pdf_records.empty:
             st.warning("⚠️ No records with PDFs found. All records will proceed to HCAD search.")
@@ -155,12 +155,12 @@ class PDFAddressExtractorApp:
     def _download_pdf(self, record: pd.Series) -> Optional[str]:
         """Download PDF for a record."""
         try:
-            film_code = record.get('FilmCode', '')
-            if not film_code:
+            pdf_url = record.get('PdfUrl', '')
+            if not pdf_url:
+                logger.warning(f"No PdfUrl found in record: {record.get('FileNo', 'unknown')}")
                 return None
             
-            # Construct PDF URL
-            pdf_url = f"https://www.cclerk.hctx.net/Applications/WebSearch/{film_code}"
+            logger.info(f"Downloading PDF from URL: {pdf_url}")
             
             # Create temporary file
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
