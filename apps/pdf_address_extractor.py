@@ -52,35 +52,24 @@ class PDFAddressExtractorApp:
         
         st.info(f"📊 Found {len(pdf_records)} records with PDFs out of {len(records_df)} total records")
         
-        # Configuration
-        col1, col2 = st.columns(2)
-        with col1:
-            dpi = st.slider("OCR DPI", min_value=150, max_value=600, value=300, 
-                           help="Higher DPI = better quality but slower processing")
-        with col2:
-            ocr_mode = st.selectbox("OCR Mode", 
-                                  ["--psm 6", "--psm 3", "--psm 4", "--psm 1"],
-                                  help="Page segmentation mode for OCR")
-        
-        # Process PDFs
-        if st.button("🔍 Extract Addresses from PDFs", type="primary"):
-            with st.spinner("Processing PDFs and extracting addresses..."):
-                results = self._process_pdfs(pdf_records, dpi, ocr_mode)
+        # Process PDFs automatically
+        with st.spinner("Processing PDFs and extracting addresses..."):
+            results = self._process_pdfs(pdf_records, dpi=300, ocr_mode="--psm 6")
+            
+            if results is not None:
+                st.success(f"✅ Successfully processed {len(results)} records")
                 
-                if results is not None:
-                    st.success(f"✅ Successfully processed {len(results)} records")
-                    
-                    # Display results
-                    st.write("### 📋 Extracted Addresses")
-                    self._display_results(results)
-                    
-                    # Download results
-                    self._download_results(results)
-                    
-                    return results
-                else:
-                    st.error("❌ Failed to process PDFs")
-                    return records_df
+                # Display results
+                st.write("### 📋 Extracted Addresses")
+                self._display_results(results)
+                
+                # Download results
+                self._download_results(results)
+                
+                return results
+            else:
+                st.error("❌ Failed to process PDFs")
+                return records_df
     
     def _process_pdfs(self, pdf_records: pd.DataFrame, dpi: int, ocr_mode: str) -> Optional[pd.DataFrame]:
         """Process PDFs and extract addresses."""
