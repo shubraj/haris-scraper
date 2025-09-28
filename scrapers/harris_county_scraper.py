@@ -257,9 +257,7 @@ class HarrisCountyScraper:
             record["PdfUrl"] = ""
             if record["FilmCode"]:
                 pdfUrl = cells[7].select_one("a").get("href") or ""
-                if pdfUrl:
-                    record["PdfUrl"] = f"https://www.cclerk.hctx.net/Applications/WebSearch/{pdfUrl}"
-               
+
 
             return record
             
@@ -412,6 +410,116 @@ class HarrisCountyScraper:
             "status": "active"
         }
     
+    def download_pdf(self, pdf_url: str, output_path: str) -> bool:
+        """
+        Download a PDF file from the given URL.
+        
+        Args:
+            pdf_url: URL of the PDF to download
+            output_path: Local path where to save the PDF
+            
+        Returns:
+            True if download successful, False otherwise
+        """
+        try:
+            logger.info(f"Starting PDF download from: {pdf_url}")
+            
+            # Ensure output directory exists
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+                logger.debug(f"Created output directory: {output_dir}")
+            
+            # Download the PDF
+            response = self.session.get(pdf_url, stream=True)
+            response.raise_for_status()
+            
+            # Get file size from headers
+            content_length = response.headers.get('content-length')
+            file_size = int(content_length) if content_length else 'unknown'
+            logger.info(f"PDF download response - Status: {response.status_code}, Size: {file_size} bytes")
+            
+            # Save the PDF
+            with open(output_path, 'wb') as f:
+                downloaded_bytes = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_bytes += len(chunk)
+            
+            # Verify download
+            actual_size = os.path.getsize(output_path)
+            logger.info(f"PDF download completed successfully - saved to: {output_path} ({actual_size:,} bytes)")
+            
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error during PDF download from {pdf_url}: {type(e).__name__}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error downloading PDF from {pdf_url}: {type(e).__name__}: {e}")
+            return False
+    
+    def download_pdfs_from_records(self, records_df: pd.DataFrame, output_dir: str = "downloads") -> Dict[str, bool]:
+        """
+        Download PDFs for all records that have FilmCode and PDF URLs.
+        
+        Args:
+            records_df: DataFrame containing scraped records
+            output_dir: Directory to save downloaded PDFs
+            
+        Returns:
+            Dictionary mapping record IDs to download success status
+        """
+        try:
+            logger.info(f"Starting bulk PDF download for {len(records_df)} records to directory: {output_dir}")
+            
+            # Create output directory
+            os.makedirs(output_dir, exist_ok=True)
+            
+            download_results = {}
+            successful_downloads = 0
+            failed_downloads = 0
+            
+            for index, record in records_df.iterrows():
+                record_id = record.get('FileNo', f'record_{index}')
+                
+                # Check if record has FilmCode and PDF URL
+                if not record.get('FilmCode'):
+                    logger.debug(f"Skipping record {record_id} - no FilmCode")
+                    download_results[record_id] = False
+                    continue
+                
+                # Construct PDF URL if not already present
+                if 'PdfUrl' not in record or not record['PdfUrl']:
+                    # Try to construct URL from FilmCode
+                    pdf_url = f"https://www.cclerk.hctx.net/Applications/WebSearch/{record['FilmCode']}"
+                else:
+                    pdf_url = record['PdfUrl']
+                
+                # Generate output filename
+                safe_filename = f"{record_id}_{record.get('FileDate', 'unknown')}.pdf"
+                safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in ('-', '_', '.'))
+                output_path = os.path.join(output_dir, safe_filename)
+                
+                # Download the PDF
+                success = self.download_pdf(pdf_url, output_path)
+                download_results[record_id] = success
+                
+                if success:
+                    successful_downloads += 1
+                    logger.info(f"Successfully downloaded PDF for record {record_id}")
+                else:
+                    failed_downloads += 1
+                    logger.warning(f"Failed to download PDF for record {record_id}")
+            
+            logger.info(f"Bulk PDF download completed - Success: {successful_downloads}, Failed: {failed_downloads}")
+            return download_results
+            
+        except Exception as e:
+            logger.error(f"Bulk PDF download operation failed: {type(e).__name__}: {e}")
+            return {}
+    
     def close_session(self):
         """Close the requests session."""
         if hasattr(self, 'session'):
@@ -455,3 +563,13 @@ def parse_html_to_excel(html: str) -> pd.DataFrame:
 def get_table(instrument_type: str, starting_date: str, ending_date: str) -> pd.DataFrame:
     """Backward compatibility function."""
     return get_scraper().scrape_records(instrument_type, starting_date, ending_date)
+
+
+def download_pdf(pdf_url: str, output_path: str) -> bool:
+    """Backward compatibility function for PDF download."""
+    return get_scraper().download_pdf(pdf_url, output_path)
+
+
+def download_pdfs_from_records(records_df: pd.DataFrame, output_dir: str = "downloads") -> Dict[str, bool]:
+    """Backward compatibility function for bulk PDF download."""
+    return get_scraper().download_pdfs_from_records(records_df, output_dir)
