@@ -67,13 +67,20 @@ class AddressExtractor:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for address extraction."""
-        return """You are an expert at extracting addresses from legal documents and property records. 
+        return """You are an expert at extracting GRANTEES addresses from legal documents and property records. 
 
 Your task is to:
-1. Identify complete addresses in the text
-2. Extract addresses in a standardized format
-3. Focus on property addresses, not mailing addresses
-4. Look for patterns like: "123 Main St, Houston, TX 77001" or "1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+1. ONLY extract addresses that belong to GRANTEES (property owners/recipients)
+2. IGNORE addresses in legal descriptions, mailing addresses, or other non-grantee addresses
+3. Look for addresses that follow Grantees names or are clearly associated with property ownership
+4. Focus on residential/property addresses, not business mailing addresses
+5. Look for patterns like: "JOHN SMITH, 123 Main St, Houston, TX 77001" or "ABC LLC, 1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+
+IMPORTANT: Only extract addresses that are clearly associated with Grantees/property owners. Ignore:
+- Legal description addresses (Lot X, Block Y)
+- Mailing addresses of companies
+- Property addresses in legal descriptions
+- Any address not directly associated with a Grantee name
 
 Return the results in JSON format with this structure:
 {
@@ -87,21 +94,28 @@ Return the results in JSON format with this structure:
       "county": "Harris County (if mentioned)",
       "state": "Texas",
       "zip_code": "77080",
-      "confidence": "high/medium/low"
+      "confidence": "high/medium/low",
+      "grantee_name": "Name of the grantee (if identifiable)"
     }
   ]
 }
 
-If no addresses are found, return: {"addresses": []}"""
+If no GRANTEES addresses are found, return: {"addresses": []}"""
     
     def _create_extraction_prompt(self, text: str, context: str) -> str:
         """Create the extraction prompt for OpenAI."""
-        return f"""Extract all property addresses from the following {context} text. Focus on complete addresses that include street number, street name, city, state, and zip code.
+        return f"""Extract ONLY GRANTEES addresses from the following {context} text. 
+
+IMPORTANT: Only extract addresses that belong to Grantees (property owners). Ignore:
+- Legal description addresses (Lot X, Block Y, etc.)
+- Mailing addresses of companies
+- Property addresses in legal descriptions
+- Any address not directly associated with a Grantee name
 
 Text to analyze:
 {text}
 
-Please extract all addresses and return them in the specified JSON format."""
+Please extract only GRANTEES addresses and return them in the specified JSON format."""
     
     def _parse_response(self, response: str) -> List[Dict[str, str]]:
         """Parse the OpenAI response and extract addresses."""
@@ -133,6 +147,18 @@ Please extract all addresses and return them in the specified JSON format."""
             List of extracted addresses
         """
         return self.extract_addresses(grantees_text, "grantees field")
+    
+    def extract_grantees_addresses_only(self, text: str) -> List[Dict[str, str]]:
+        """
+        Extract ONLY Grantees addresses from any text, ignoring other addresses.
+        
+        Args:
+            text: Text that may contain various types of addresses
+            
+        Returns:
+            List of Grantees addresses only
+        """
+        return self.extract_addresses(text, "grantees addresses only")
     
     def extract_from_legal_description(self, legal_desc: str) -> List[Dict[str, str]]:
         """

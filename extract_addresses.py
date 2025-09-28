@@ -21,19 +21,21 @@ def main():
         print(f"Extracting addresses from: {text[:100]}...")
         
         extractor = AddressExtractor()
-        addresses = extractor.extract_addresses(text)
+        addresses = extractor.extract_grantees_addresses_only(text)
         
         if addresses:
-            print(f"\n✅ Found {len(addresses)} address(es):")
+            print(f"\n✅ Found {len(addresses)} GRANTEES address(es):")
             for i, addr in enumerate(addresses, 1):
                 print(f"\n{i}. {extractor.standardize_address(addr)}")
                 print(f"   Confidence: {addr.get('confidence', 'unknown')}")
+                if addr.get('grantee_name'):
+                    print(f"   Grantee: {addr.get('grantee_name')}")
                 print(f"   Street: {addr.get('street_number', '')} {addr.get('street_name', '')}")
                 print(f"   City: {addr.get('city', '')}")
                 print(f"   State: {addr.get('state', '')}")
                 print(f"   ZIP: {addr.get('zip_code', '')}")
         else:
-            print("❌ No addresses found in the text")
+            print("❌ No GRANTEES addresses found in the text")
     
     except Exception as e:
         print(f"❌ Error: {e}")
