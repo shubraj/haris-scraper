@@ -7,8 +7,7 @@ HCAD property searches.
 import streamlit as st
 import os
 from apps.instrument_scraper import run_app1
-from apps.pdf_address_extractor import run_app2_pdf
-from apps.hcad_search import run_app2_hcad
+from apps.unified_address_extractor import run_app2_unified
 
 # Install Playwright
 os.system("playwright install")
@@ -29,8 +28,8 @@ def main():
     
     choice = st.sidebar.radio(
         "Select Step:",
-        ["Step 1: Scrape Instruments", "Step 2: Extract PDF Addresses", "Step 3: HCAD Search"],
-        help="Step 1: Scrape instrument data from Harris County records\nStep 2: Extract addresses from PDFs using AI\nStep 3: Search for property addresses using HCAD"
+        ["Step 1: Scrape Instruments", "Step 2: Extract Addresses"],
+        help="Step 1: Scrape instrument data from Harris County records\nStep 2: Extract addresses from PDFs and HCAD fallback"
     )
     
     st.sidebar.markdown("---")
@@ -38,8 +37,7 @@ def main():
     st.sidebar.markdown("""
     This tool helps you:
     1. **Scrape** Harris County instrument data
-    2. **Extract** addresses from PDFs using AI
-    3. **Search** for property addresses using HCAD
+    2. **Extract** addresses from PDFs and HCAD fallback
     
     Complete steps in order for best results.
     """)
@@ -47,8 +45,6 @@ def main():
     # Initialize session state
     if "app1_results" not in st.session_state:
         st.session_state.app1_results = None
-    if "app2_results" not in st.session_state:
-        st.session_state.app2_results = None
     
     # Main content area
     if choice == "Step 1: Scrape Instruments":
@@ -58,29 +54,17 @@ def main():
         df = run_app1()
         if df is not None and not df.empty:
             st.session_state.app1_results = df
-            st.success("✅ Data ready for PDF address extraction!")
+            st.success("✅ Data ready for address extraction!")
     
-    elif choice == "Step 2: Extract PDF Addresses":
-        st.header("📄 Step 2: Extract PDF Addresses")
-        st.markdown("Extract property addresses from PDF documents using AI-powered OCR.")
+    elif choice == "Step 2: Extract Addresses":
+        st.header("🔍 Step 2: Extract Addresses")
+        st.markdown("Extract property addresses from PDFs using AI, with HCAD fallback for missing addresses.")
         
         if st.session_state.app1_results is not None:
-            df = run_app2_pdf(st.session_state.app1_results)
+            df = run_app2_unified(st.session_state.app1_results)
             if df is not None and not df.empty:
-                st.session_state.app2_results = df
-                st.success("✅ Addresses extracted! Ready for HCAD search.")
-        else:
-            st.warning("⚠️ Please complete Step 1 first to get instrument data.")
-    
-    elif choice == "Step 3: HCAD Search":
-        st.header("🔍 Step 3: HCAD Property Search")
-        st.markdown("Search for property addresses using HCAD for records without PDF addresses.")
-        
-        # Use Step 2 results if available, otherwise use Step 1 results
-        data_to_search = st.session_state.app2_results if st.session_state.app2_results is not None else st.session_state.app1_results
-        
-        if data_to_search is not None:
-            run_app2_hcad(data_to_search)
+                st.session_state.app1_results = df  # Update with addresses
+                st.success("✅ Address extraction completed!")
         else:
             st.warning("⚠️ Please complete Step 1 first to get instrument data.")
 
