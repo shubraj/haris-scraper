@@ -122,10 +122,6 @@ class UnifiedAddressExtractorApp:
             ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
             pdf_text = " ".join([page['text'] for page in ocr_results])
             
-            # Store OCR text for debugging
-            record_id = record.get('FileNo', 'unknown')
-            self._save_ocr_text_for_debugging(record_id, pdf_text, ocr_results)
-            
             if pdf_text.strip():
                 addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
                 if addresses:
@@ -286,36 +282,6 @@ class UnifiedAddressExtractorApp:
             'Legal Description': original_record.get('LegalDescription', ''),
             'Property Address': property_address
         }
-    
-    def _save_ocr_text_for_debugging(self, record_id: str, pdf_text: str, ocr_results: List[Dict]) -> None:
-        """Save OCR text to file for debugging purposes."""
-        try:
-            debug_dir = "debug_ocr"
-            os.makedirs(debug_dir, exist_ok=True)
-            
-            text_file = os.path.join(debug_dir, f"ocr_text_{record_id}.txt")
-            with open(text_file, 'w', encoding='utf-8') as f:
-                f.write(f"Record ID: {record_id}\n")
-                f.write(f"OCR Text Length: {len(pdf_text)} characters\n")
-                f.write(f"Number of Pages: {len(ocr_results)}\n")
-                f.write("=" * 50 + "\n\n")
-                f.write("FULL OCR TEXT:\n")
-                f.write(pdf_text)
-                f.write("\n\n" + "=" * 50 + "\n\n")
-                f.write("PAGE-BY-PAGE BREAKDOWN:\n\n")
-                
-                for i, page_result in enumerate(ocr_results):
-                    f.write(f"--- PAGE {i + 1} ---\n")
-                    f.write(f"Word Count: {page_result.get('word_count', 0)}\n")
-                    f.write(f"Character Count: {page_result.get('character_count', 0)}\n")
-                    f.write("Text:\n")
-                    f.write(page_result.get('text', ''))
-                    f.write("\n\n")
-            
-            logger.info(f"OCR text saved for debugging: {text_file}")
-            
-        except Exception as e:
-            logger.error(f"Failed to save OCR text for debugging: {e}")
     
     def _display_results(self, results_df: pd.DataFrame):
         """Display extraction results."""
