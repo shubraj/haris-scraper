@@ -29,7 +29,7 @@ class HarrisCountyScraper:
         self.timeout = timeout
         self.base_url = HARRIS_COUNTY_BASE_URL
         self.search_url = self._get_search_url()
-        
+        self.security_params = self._get_security_params()
         logger.info("Harris County scraper initialized")
     
     def _get_search_url(self) -> str:
@@ -40,6 +40,25 @@ class HarrisCountyScraper:
             'FkLbEd+ePVrAgLk58t/pKToXIY6RA7Vlxcm4HNe0h+B44WcgPp55ZpkPH7n9pxaYn8HnDJN/'
             'EGBWxPTWRvRlL5+zpHxYWmIh2BBJUy1a29u0hDndbUlo+Vr2ytEO6ki'
         )
+    
+    def _get_security_params(self) -> Dict[str, str]:
+        """Get the security parameters for Harris County records."""
+        response = requests.post(
+            self.search_url,
+            headers=self.headers,
+            timeout=self.timeout
+        )
+        soup = BeautifulSoup(response.content, "html.parser")
+        
+        return {
+            "__VIEWSTATE":soup.select_one("input#__VIEWSTATE").get("value") or "",
+            "__VIEWSTATEGENERATOR":soup.select_one("input#__VIEWSTATEGENERATOR").get("value") or "",
+            "__EVENTVALIDATION":soup.select_one("input#__EVENTVALIDATION").get("value") or "",
+            "__VIEWSTATEENCRYPTED":soup.select_one("input#__VIEWSTATEENCRYPTED").get("value") or "",
+            "__LASTFOCUS":soup.select_one("input#__LASTFOCUS").get("value") or "",
+            "__EVENTARGUMENT":soup.select_one("input#__EVENTARGUMENT").get("value") or "",
+            "__EVENTTARGET":soup.select_one("input#__EVENTTARGET").get("value") or "",
+        }
     
     def _prepare_search_data(self, instrument_type: str, start_date: str, end_date: str) -> Dict[str, str]:
         """
@@ -53,13 +72,8 @@ class HarrisCountyScraper:
         Returns:
             Dictionary containing form data
         """
-        return {
+        search_data = {
             'ctl00$ScriptManager1': 'ctl00$ScriptManager1|ctl00$ContentPlaceHolder1$btnSearch',
-            '__EVENTTARGET': '',
-            '__EVENTARGUMENT': '',
-            '__LASTFOCUS': '',
-            '__VIEWSTATEGENERATOR': '2E012D3B',
-            '__VIEWSTATEENCRYPTED': '',
             'ctl00$ContentPlaceHolder1$hfSearchType': '0',
             'ctl00$ContentPlaceHolder1$hfViewCopyOrders': 'False',
             'ctl00$ContentPlaceHolder1$hfViewECart': 'False',
@@ -84,6 +98,8 @@ class HarrisCountyScraper:
             'ctl00$ContentPlaceHolder1$txtReserve': '',
             'ctl00$ContentPlaceHolder1$btnSearch': 'Search',
         }
+        search_data.update(self.security_params)
+        return search_data
     
     def search_records(self, instrument_type: str, start_date: str, end_date: str) -> Optional[str]:
         """
@@ -349,20 +365,3 @@ class HarrisCountyScraper:
         }
 
 
-# Backward compatibility functions
-def get_html_table(instrument_type: str, starting_date: str, ending_date: str) -> str:
-    """Backward compatibility function."""
-    scraper = HarrisCountyScraper()
-    return scraper.search_records(instrument_type, starting_date, ending_date) or ""
-
-
-def parse_html_to_excel(html: str) -> pd.DataFrame:
-    """Backward compatibility function."""
-    scraper = HarrisCountyScraper()
-    return scraper.parse_html_response(html)
-
-
-def get_table(instrument_type: str, starting_date: str, ending_date: str) -> pd.DataFrame:
-    """Backward compatibility function."""
-    scraper = HarrisCountyScraper()
-    return scraper.scrape_records(instrument_type, starting_date, ending_date)
