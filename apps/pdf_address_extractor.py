@@ -212,7 +212,7 @@ class PDFAddressExtractorApp:
             st.metric("Not Found", failed)
         
         # Results table
-        st.dataframe(results_df, use_container_width=True)
+        st.dataframe(results_df, width='stretch')
         
         # Address extraction summary
         st.write("### 📊 Address Extraction Summary")
