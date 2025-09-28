@@ -303,6 +303,11 @@ class HCADScraper:
             await asyncio.sleep(2)
             
             await browser.close()
+            
+            # Store results in session state
+            if results:
+                import streamlit as st
+                st.session_state.hcad_results = pd.DataFrame(results)
 
 
 async def run_hcad_searches(df: pd.DataFrame, results_placeholder) -> None:

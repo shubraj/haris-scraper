@@ -115,9 +115,16 @@ class UnifiedAddressExtractorApp:
             
             # Add HCAD results that have addresses
             if not hcad_results.empty:
+                logger.info(f"Processing {len(hcad_results)} HCAD results")
                 for _, hcad_record in hcad_results.iterrows():
-                    if hcad_record.get('Property Address', '').strip():
+                    address = hcad_record.get('Property Address', '')
+                    if address and address.strip():
+                        logger.info(f"Adding HCAD result with address: {address}")
                         final_results.append(hcad_record.to_dict())
+                    else:
+                        logger.debug(f"Skipping HCAD result with empty address: {hcad_record.get('FileNo', 'unknown')}")
+            else:
+                logger.warning("No HCAD results to process")
             
             if final_results:
                 final_df = pd.DataFrame(final_results)
@@ -199,13 +206,20 @@ class UnifiedAddressExtractorApp:
             # Create placeholder for HCAD results
             results_placeholder = st.empty()
             
+            # Clear any previous HCAD results
+            if 'hcad_results' in st.session_state:
+                del st.session_state.hcad_results
+            
             # Run HCAD searches
             await run_hcad_searches(hcad_df, results_placeholder)
             
             # Get results from session state if available
             if 'hcad_results' in st.session_state:
-                return st.session_state.hcad_results
+                hcad_results = st.session_state.hcad_results
+                logger.info(f"HCAD search completed - found {len(hcad_results)} results")
+                return hcad_results
             else:
+                logger.warning("No HCAD results found in session state")
                 return pd.DataFrame()
                 
         except Exception as e:
