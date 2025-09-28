@@ -178,7 +178,7 @@ class UnifiedAddressExtractorApp:
             # Small delay between batches to avoid OpenAI rate limits
             if batch_num < total_batches:
                 import time
-                time.sleep(1)  # 1 second delay between batches
+                time.sleep(2)  # 2 second delay between batches
         
         # Clear status text
         status_text.text("✅ PDF processing completed!")
@@ -224,34 +224,47 @@ class UnifiedAddressExtractorApp:
     
     
     def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
-        """Try to extract address from PDF for a single record."""
-        try:
-            # Download PDF
-            pdf_path = self._download_pdf(record)
-            if not pdf_path:
+        """Try to extract address from PDF for a single record with rate limit handling."""
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                # Download PDF
+                pdf_path = self._download_pdf(record)
+                if not pdf_path:
+                    return None
+                
+                # Extract text and addresses
+                ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
+                pdf_text = " ".join([page['text'] for page in ocr_results])
+                
+                if pdf_text.strip():
+                    addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
+                    if addresses:
+                        return self.address_extractor.standardize_address(addresses[0])
+                
                 return None
-            
-            # Extract text and addresses
-            ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
-            pdf_text = " ".join([page['text'] for page in ocr_results])
-            
-            if pdf_text.strip():
-                addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
-                if addresses:
-                    return self.address_extractor.standardize_address(addresses[0])
-            
-            return None
-            
-        except Exception as e:
-            error_msg = str(e).lower()
-            if 'rate limit' in error_msg or 'too many requests' in error_msg:
-                logger.warning(f"OpenAI rate limit hit for record {record.get('FileNo', 'unknown')}: {e}")
-            else:
-                logger.error(f"PDF extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
-            return None
-        finally:
-            if 'pdf_path' in locals() and os.path.exists(pdf_path):
-                os.remove(pdf_path)
+                
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'rate limit' in error_msg or 'too many requests' in error_msg:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"OpenAI rate limit hit for record {record.get('FileNo', 'unknown')} (attempt {attempt + 1}/{max_retries}): {e}")
+                        import time
+                        time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                        continue
+                    else:
+                        logger.error(f"OpenAI rate limit exceeded after {max_retries} attempts for record {record.get('FileNo', 'unknown')}")
+                        return None
+                else:
+                    logger.error(f"PDF extraction failed for record {record.get('FileNo', 'unknown')}: {e}")
+                    return None
+            finally:
+                if 'pdf_path' in locals() and os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+        
+        return None
     
     
     def _process_pdf_records(self, pdf_records: pd.DataFrame) -> Optional[pd.DataFrame]:
