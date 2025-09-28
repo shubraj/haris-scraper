@@ -75,9 +75,11 @@ class UnifiedAddressExtractorApp:
             
             if final_results:
                 final_df = pd.DataFrame(final_results)
+                st.success(f"✅ Processing completed! Found addresses for {len(final_df)} out of {len(records_df)} records")
                 logger.info(f"Unified address extraction completed - {len(final_df)} records with addresses found")
                 return final_df
             else:
+                st.warning("⚠️ No addresses found for any records")
                 logger.warning("No addresses found from either PDF extraction or HCAD search")
                 return None
                 
@@ -95,11 +97,15 @@ class UnifiedAddressExtractorApp:
         batch_size = 5
         total_batches = (len(records_list) + batch_size - 1) // batch_size
         
+        # Create progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
         for i in range(0, len(records_list), batch_size):
             batch = records_list[i:i + batch_size]
             batch_num = i // batch_size + 1
             
-            st.write(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch)} records)")
+            status_text.text(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch)} records)")
             
             # Process batch concurrently
             with ThreadPoolExecutor(max_workers=5) as executor:
@@ -118,11 +124,16 @@ class UnifiedAddressExtractorApp:
                             final_results.append(result)
                             record_id = record.get('FileNo', 'unknown')
                             address = result.get('Property Address', '')
-                            st.write(f"✅ {record_id}: Found address: {address}")
+                            logger.info(f"✅ {record_id}: Found address: {address}")
                     except Exception as e:
                         record_id = record.get('FileNo', 'unknown')
                         logger.error(f"Error processing record {record_id}: {e}")
-                        st.write(f"❌ {record_id}: Error - {str(e)}")
+            
+            # Update progress bar
+            progress_bar.progress(batch_num / total_batches)
+        
+        # Clear status text
+        status_text.text("✅ Processing completed!")
         
         return final_results
     
