@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from scrapers.harris_county_scraper import get_scraper
-from utils.address_extractor import get_scraper as get_address_extractor
+from utils.address_extractor import AddressExtractor
 from utils.pdf_ocr import PDFOCR
 from utils.logger_config import get_app_logger
 
@@ -23,7 +23,7 @@ class PDFAddressExtractorApp:
     
     def __init__(self):
         self.scraper = get_scraper()
-        self.address_extractor = get_address_extractor()
+        self.address_extractor = AddressExtractor()
         self.pdf_ocr = PDFOCR()
     
     def run(self, records_df: pd.DataFrame) -> Optional[pd.DataFrame]:
