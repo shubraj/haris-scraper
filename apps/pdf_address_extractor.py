@@ -36,9 +36,6 @@ class PDFAddressExtractorApp:
         Returns:
             DataFrame with extracted addresses or None if no data
         """
-        st.header("📄 Step 2: Extract Addresses from PDFs")
-        st.markdown("Extract property addresses from PDF documents using AI-powered OCR and address extraction.")
-        
         if records_df is None or records_df.empty:
             st.warning("⚠️ No records available. Please complete Step 1 first.")
             return None
