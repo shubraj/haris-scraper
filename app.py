@@ -35,7 +35,7 @@ def main():
             if key.startswith('file_') or key.endswith('_file'):
                 del st.session_state[key]
     
-    # Custom CSS and JavaScript for smooth UI and refresh warning
+    # Custom CSS for smooth UI
     st.markdown("""
     <style>
     .main-header {
@@ -81,63 +81,6 @@ def main():
         margin-bottom: 0.5rem;
     }
     </style>
-    
-    <script>
-    // Warn user before page refresh/close if there's data in progress
-    let hasData = false;
-    let isProcessing = false;
-    
-    // Check if there's data in session storage (indicating work in progress)
-    function checkForData() {
-        // Check if we're in the middle of processing
-        const progressElements = document.querySelectorAll('[data-testid="stProgress"]');
-        const statusElements = document.querySelectorAll('[data-testid="stText"]');
-        
-        isProcessing = progressElements.length > 0 || 
-                     Array.from(statusElements).some(el => 
-                         el.textContent.includes('Processing') || 
-                         el.textContent.includes('Search') ||
-                         el.textContent.includes('Extracting')
-                     );
-        
-        // Check if there are results displayed
-        const resultsElements = document.querySelectorAll('[data-testid="stDataFrame"]');
-        hasData = resultsElements.length > 0;
-        
-        return hasData || isProcessing;
-    }
-    
-    // Show warning before page unload
-    window.addEventListener('beforeunload', function(e) {
-        if (checkForData()) {
-            const message = '⚠️ You have data in progress or results displayed. Refreshing will lose all progress and data. Are you sure you want to leave?';
-            e.returnValue = message;
-            return message;
-        }
-    });
-    
-    // Also warn on page visibility change (tab switching)
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden && checkForData()) {
-            console.warn('⚠️ Data will be lost if you navigate away from this page');
-        }
-    });
-    
-    // Monitor for processing state changes
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'childList') {
-                checkForData();
-            }
-        });
-    });
-    
-    // Start observing
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    </script>
     """, unsafe_allow_html=True)
     
     # Main header
@@ -176,10 +119,6 @@ def main():
         st.session_state.final_results = None
     if "workflow_step" not in st.session_state:
         st.session_state.workflow_step = "scrape"
-    
-    # Show data loss warning if there's data in progress
-    if st.session_state.scraped_data is not None or st.session_state.final_results is not None:
-        st.warning("⚠️ **Important**: Do not refresh this page or navigate away - you will lose all your data and progress!")
     
     # Main workflow
     if st.session_state.workflow_step == "scrape":
