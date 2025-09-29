@@ -156,8 +156,10 @@ class UnifiedAddressExtractorApp:
         if not pdf_records:
             return []
         
-        # Process in batches of 2 (reduced for OpenAI rate limits)
-        batch_size = 2
+        # Process in batches of 3 (optimized for OpenAI rate limits: 400 RPM, 160k TPM)
+        # Rate limit calculation: 3 workers × 3 batches/min = 9 requests/min per batch
+        # With 0.5s delay between batches: ~120 requests/min (well under 400 RPM limit)
+        batch_size = 3
         total_batches = (len(pdf_records) + batch_size - 1) // batch_size
         all_results = []
         
@@ -171,8 +173,8 @@ class UnifiedAddressExtractorApp:
             
             status_text.text(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} records)")
             
-            # Process batch concurrently (reduced to 2 workers for OpenAI rate limits)
-            with ThreadPoolExecutor(max_workers=2) as executor:
+            # Process batch concurrently (3 workers for optimal rate limit usage)
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 # Submit all tasks in the batch
                 future_to_record = {
                     executor.submit(self._try_pdf_extraction, record): record 
@@ -200,6 +202,10 @@ class UnifiedAddressExtractorApp:
             
             # Update progress bar
             progress_bar.progress(batch_num / total_batches)
+            
+            # Small delay between batches to respect 400 RPM limit (3 requests per 0.5 seconds)
+            if batch_num < total_batches:
+                time.sleep(0.5)  # 500ms delay between batches
         
         # Clear status text
         status_text.text("✅ PDF processing completed!")
@@ -245,9 +251,9 @@ class UnifiedAddressExtractorApp:
     
     
     def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
-        """Try to extract address from PDF for a single record with rate limit handling."""
-        max_retries = 3
-        retry_delay = 5
+        """Try to extract address from PDF for a single record with optimized rate limit handling."""
+        max_retries = 2  # Reduced retries for faster processing
+        retry_delay = 3  # Reduced delay for faster recovery
         
         for attempt in range(max_retries):
             try:
@@ -272,7 +278,7 @@ class UnifiedAddressExtractorApp:
                 if 'rate limit' in error_msg or 'too many requests' in error_msg:
                     if attempt < max_retries - 1:
                         logger.warning(f"OpenAI rate limit hit for record {record.get('FileNo', 'unknown')} (attempt {attempt + 1}/{max_retries}): {e}")
-                        time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                        time.sleep(retry_delay + (attempt * 2))  # Linear backoff: 3s, 5s
                         continue
                     else:
                         logger.error(f"OpenAI rate limit exceeded after {max_retries} attempts for record {record.get('FileNo', 'unknown')}")
