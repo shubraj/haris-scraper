@@ -117,9 +117,14 @@ def main():
         st.session_state.process_interrupted = False
     if "page_refreshed" not in st.session_state:
         st.session_state.page_refreshed = False
+    if "extractor_instance" not in st.session_state:
+        st.session_state.extractor_instance = None
     
     # Detect page refresh and interrupt processing
     if st.session_state.workflow_step == "extract" and st.session_state.processing and not st.session_state.page_refreshed:
+        # Cancel the running extractor instance
+        if st.session_state.extractor_instance:
+            st.session_state.extractor_instance.cancel()
         st.session_state.process_interrupted = True
         st.session_state.processing = False
         st.session_state.page_refreshed = True
@@ -165,12 +170,16 @@ def _show_address_extraction_step():
     if st.session_state.process_interrupted:
         st.warning("⚠️ Process was interrupted. Please restart the workflow.")
         if st.button("🔄 Restart Workflow"):
+            # Cancel any running extractor
+            if st.session_state.extractor_instance:
+                st.session_state.extractor_instance.cancel()
             # Reset all session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
             st.session_state.processing = False
             st.session_state.process_interrupted = False
+            st.session_state.extractor_instance = None
             if 'live_results' in st.session_state:
                 del st.session_state.live_results
             if 'live_results_df' in st.session_state:
@@ -189,6 +198,10 @@ def _show_address_extraction_step():
         
         # Mark as processing
         st.session_state.processing = True
+        
+        # Create extractor instance and store it
+        from apps.unified_address_extractor import UnifiedAddressExtractorApp
+        st.session_state.extractor_instance = UnifiedAddressExtractorApp()
         
         # Simple progress display
         st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
@@ -212,7 +225,7 @@ def _show_address_extraction_step():
                 status_text.text(message)
             
             # Run address extraction with progress callback
-            df = run_app2_unified(st.session_state.scraped_data, update_progress)
+            df = st.session_state.extractor_instance.run(st.session_state.scraped_data, update_progress)
             
             if df is not None and not df.empty:
                 # Update progress to complete
@@ -240,12 +253,20 @@ def _show_address_extraction_step():
     else:
         st.warning("⚠️ No scraped data available. Please restart the process.")
         if st.button("🔄 Restart Workflow"):
+            # Cancel any running extractor
+            if st.session_state.extractor_instance:
+                st.session_state.extractor_instance.cancel()
             # Reset all session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
             st.session_state.processing = False
             st.session_state.process_interrupted = False
+            st.session_state.extractor_instance = None
+            if 'live_results' in st.session_state:
+                del st.session_state.live_results
+            if 'live_results_df' in st.session_state:
+                del st.session_state.live_results_df
             st.rerun()
 
 def _show_final_results():
@@ -312,6 +333,9 @@ def _show_final_results():
         # Reset button
         st.markdown("---")
         if st.button("🔄 Start New Search", width='stretch'):
+            # Cancel any running extractor
+            if st.session_state.extractor_instance:
+                st.session_state.extractor_instance.cancel()
             # Reset all session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
@@ -319,6 +343,7 @@ def _show_final_results():
             st.session_state.processing = False
             st.session_state.process_interrupted = False
             st.session_state.page_refreshed = False
+            st.session_state.extractor_instance = None
             if 'live_results' in st.session_state:
                 del st.session_state.live_results
             if 'live_results_df' in st.session_state:
