@@ -282,15 +282,9 @@ class UnifiedAddressExtractorApp:
                     success_rate = (addresses_found / len(live_df)) * 100 if len(live_df) > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
                 
-                # Show ALL results accumulated so far (not just recent 10)
+                # Show ALL results accumulated so far
                 st.markdown("#### 📋 All Extracted Results (Accumulated)")
                 st.dataframe(live_df, width='stretch')
-                
-                # Show recent additions (last 5) for quick reference
-                if len(live_df) > 5:
-                    st.markdown("#### 🔄 Latest Additions")
-                    recent_df = live_df.tail(5)
-                    st.dataframe(recent_df, width='stretch')
     
     async def _process_hcad_batch_with_live_updates(self, hcad_records: List[Dict], progress_callback=None, results_placeholder=None, status_placeholder=None) -> List[Optional[Dict]]:
         """Process HCAD records in batches with live updates."""
