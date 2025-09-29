@@ -120,6 +120,18 @@ def main():
     if "live_results_df" not in st.session_state:
         st.session_state.live_results_df = pd.DataFrame()
     
+    # Debug information (remove in production)
+    with st.sidebar:
+        st.markdown("### 🔧 Debug Info")
+        st.write(f"Workflow Step: {st.session_state.workflow_step}")
+        st.write(f"Has Scraped Data: {st.session_state.scraped_data is not None}")
+        st.write(f"Processing Started: {st.session_state.processing_started}")
+        st.write(f"Processing Completed: {st.session_state.processing_completed}")
+        if st.session_state.scraped_data is not None:
+            st.write(f"Records Count: {len(st.session_state.scraped_data)}")
+        if st.session_state.live_results:
+            st.write(f"Live Results: {len(st.session_state.live_results)}")
+    
     # Main workflow
     if st.session_state.workflow_step == "scrape":
         _show_scraping_step()
@@ -135,19 +147,29 @@ def _show_scraping_step():
         st.markdown("Configure your search parameters and scrape instrument data from Harris County records.")
         st.markdown("---")
     
-    # Run the instrument scraper
-        df = run_app1()
-    
-    if df is not None and not df.empty:
-        st.session_state.scraped_data = df
-        
+    # Check if we already have scraped data (page refresh scenario)
+    if st.session_state.scraped_data is not None and not st.session_state.scraped_data.empty:
         st.markdown('<div class="success-container">', unsafe_allow_html=True)
-        st.success("✅ Scraping completed! Found {} records. Starting address extraction...".format(len(df)))
+        st.success("✅ Scraping already completed! Found {} records. Moving to address extraction...".format(len(st.session_state.scraped_data)))
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Auto-start address extraction
         st.session_state.workflow_step = "extract"
         st.rerun()
+    else:
+        # Run the instrument scraper only if we don't have data
+        df = run_app1()
+        
+        if df is not None and not df.empty:
+            st.session_state.scraped_data = df
+            
+            st.markdown('<div class="success-container">', unsafe_allow_html=True)
+            st.success("✅ Scraping completed! Found {} records. Starting address extraction...".format(len(df)))
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Auto-start address extraction
+            st.session_state.workflow_step = "extract"
+            st.rerun()
 
 def _show_address_extraction_step():
     """Show the address extraction step."""
