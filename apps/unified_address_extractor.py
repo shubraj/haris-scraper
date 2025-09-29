@@ -38,28 +38,9 @@ class UnifiedAddressExtractorApp:
             with open('instrument_types.json', 'r') as f:
                 name_to_code = json.load(f)
             
-            # Create reverse mapping (code -> name) with duplicate handling
-            code_to_name = {}
-            code_counts = {}
-            
-            for name, code in name_to_code.items():
-                if code in code_counts:
-                    # Duplicate code found, create unique key
-                    code_counts[code] += 1
-                    unique_code = f"{code}#{code_counts[code]}"
-                    code_to_name[unique_code] = name
-                    logger.debug(f"Duplicate code '{code}' -> '{unique_code}': {name}")
-                else:
-                    # First occurrence of this code
-                    code_counts[code] = 1
-                    code_to_name[code] = name
-            
-            # Log duplicate codes for debugging
-            duplicates = {code: count for code, count in code_counts.items() if count > 1}
-            if duplicates:
-                logger.info(f"Found {len(duplicates)} codes with duplicates: {duplicates}")
-            
-            logger.info(f"Loaded {len(code_to_name)} instrument type mappings ({len(code_counts)} unique codes)")
+            # Create reverse mapping (code -> name)
+            code_to_name = {code: name for name, code in name_to_code.items()}
+            logger.info(f"Loaded {len(code_to_name)} instrument type mappings")
             return code_to_name
             
         except Exception as e:
@@ -71,18 +52,8 @@ class UnifiedAddressExtractorApp:
         if not doc_type:
             return ''
         
-        # First try exact match
-        if doc_type in self.instrument_type_mapping:
-            return self.instrument_type_mapping[doc_type]
-        
-        # If not found, try to find by base code (remove #1, #2, etc.)
-        base_code = doc_type.split('#')[0]
-        for key, value in self.instrument_type_mapping.items():
-            if key.startswith(base_code + '#'):
-                return value
-        
-        # If still not found, return the original code
-        return doc_type
+        # Try to find the name for this code
+        return self.instrument_type_mapping.get(doc_type, doc_type)
     
     def run(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """
@@ -423,6 +394,20 @@ class UnifiedAddressExtractorApp:
                 pdf_path = self._download_pdf(record)
                 if not pdf_path:
                     return None
+                
+                # Check PDF page count - skip if more than 6 pages
+                try:
+                    import fitz  # PyMuPDF
+                    pdf_doc = fitz.open(pdf_path)
+                    page_count = pdf_doc.page_count
+                    pdf_doc.close()
+                    
+                    if page_count > 6:
+                        logger.info(f"Skipping PDF for record {record.get('FileNo', 'unknown')}: {page_count} pages (exceeds 6-page limit)")
+                        return None
+                except Exception as e:
+                    logger.warning(f"Could not check page count for record {record.get('FileNo', 'unknown')}: {e}")
+                    # Continue with processing if page count check fails
                 
                 # Extract text and addresses
                 ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
