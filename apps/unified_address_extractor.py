@@ -107,17 +107,28 @@ class UnifiedAddressExtractorApp:
         final_results = []
         hcad_records = []
         
+        # Initialize session state for live results display
+        if 'live_results' not in st.session_state:
+            st.session_state.live_results = []
+        if 'live_results_df' not in st.session_state:
+            st.session_state.live_results_df = pd.DataFrame()
+        
+        # Create live results display
+        results_placeholder = st.empty()
+        status_placeholder = st.empty()
+        
         # Step 1: Process PDFs concurrently (5 at a time)
         pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
         if pdf_records:
             if progress_callback:
                 progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
-            pdf_results = self._process_pdfs_concurrent(records_list)
+            pdf_results = self._process_pdfs_concurrent_with_live_updates(records_list, results_placeholder, status_placeholder)
             
             # Add successful PDF results
             for result in pdf_results:
                 if result:
                     final_results.append(result)
+                    st.session_state.live_results.append(result)
             
             if progress_callback:
                 progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
@@ -138,12 +149,13 @@ class UnifiedAddressExtractorApp:
         if hcad_records:
             if progress_callback:
                 progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
-            hcad_results = asyncio.run(self._process_hcad_batch(hcad_records, progress_callback))
+            hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
             
             # Add successful HCAD results
             for result in hcad_results:
                 if result:
                     final_results.append(result)
+                    st.session_state.live_results.append(result)
         else:
             if progress_callback:
                 progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
@@ -197,6 +209,134 @@ class UnifiedAddressExtractorApp:
                         batch_results.append(None)
                 
                 all_results.extend(batch_results)
+        
+        return all_results
+    
+    def _process_pdfs_concurrent_with_live_updates(self, records_list: List[Dict], results_placeholder, status_placeholder) -> List[Optional[Dict]]:
+        """Process PDFs concurrently with live results display."""
+        pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
+        
+        if not pdf_records:
+            return []
+        
+        # Process in batches of 3 (optimized for OpenAI rate limits)
+        batch_size = 3
+        total_batches = (len(pdf_records) + batch_size - 1) // batch_size
+        all_results = []
+        
+        for i in range(0, len(pdf_records), batch_size):
+            batch = pdf_records[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            
+            # Update status
+            status_placeholder.info(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} PDFs)")
+            
+            # Process batch concurrently
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                future_to_record = {
+                    executor.submit(self._try_pdf_extraction, record): record 
+                    for record in batch
+                }
+                
+                # Collect results as they complete
+                batch_results = []
+                for future in as_completed(future_to_record):
+                    record = future_to_record[future]
+                    try:
+                        pdf_address = future.result()
+                        if pdf_address:
+                            result = self._create_result_record(record, pdf_address, 'PDF extraction')
+                            batch_results.append(result)
+                            logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
+                            
+                            # Update live results display
+                            st.session_state.live_results.append(result)
+                            self._update_live_results_display(results_placeholder)
+                        else:
+                            batch_results.append(None)
+                    except Exception as e:
+                        record_id = record.get('FileNo', 'unknown')
+                        logger.error(f"Error processing PDF for record {record_id}: {e}")
+                        batch_results.append(None)
+                
+                all_results.extend(batch_results)
+        
+        return all_results
+    
+    def _update_live_results_display(self, results_placeholder):
+        """Update the live results display with current results."""
+        if st.session_state.live_results:
+            live_df = pd.DataFrame(st.session_state.live_results)
+            st.session_state.live_results_df = live_df
+            
+            # Show live results
+            with results_placeholder.container():
+                st.markdown("### 📊 Live Results (Updated in Real-Time)")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Records Processed", len(live_df))
+                with col2:
+                    addresses_found = len(live_df[live_df['Property Address'] != ''])
+                    st.metric("Addresses Found", addresses_found)
+                with col3:
+                    success_rate = (addresses_found / len(live_df)) * 100 if len(live_df) > 0 else 0
+                    st.metric("Success Rate", f"{success_rate:.1f}%")
+                
+                # Show recent results (last 10)
+                st.markdown("#### 🔄 Recent Extractions")
+                recent_df = live_df.tail(10)
+                st.dataframe(recent_df, width='stretch')
+    
+    async def _process_hcad_batch_with_live_updates(self, hcad_records: List[Dict], progress_callback=None, results_placeholder=None, status_placeholder=None) -> List[Optional[Dict]]:
+        """Process HCAD records in batches with live updates."""
+        if not hcad_records:
+            return []
+        
+        # Process in batches of 10
+        batch_size = 10
+        total_batches = (len(hcad_records) + batch_size - 1) // batch_size
+        all_results = []
+        
+        for i in range(0, len(hcad_records), batch_size):
+            batch = hcad_records[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            processed_count = min(i + batch_size, len(hcad_records))
+            
+            # Update status
+            if status_placeholder:
+                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches)")
+            
+            # Update progress
+            if progress_callback:
+                progress_value = 0.6 + (0.4 * (batch_num / total_batches))
+                progress_callback(progress_value, f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records")
+            
+            # Create DataFrame for this batch
+            hcad_df = pd.DataFrame(batch)
+            
+            # Clear previous results
+            if 'hcad_results' in st.session_state:
+                del st.session_state.hcad_results
+            
+            # Run HCAD search for this batch
+            await run_hcad_searches(hcad_df)
+            
+            # Get results and update live display
+            if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
+                batch_results = st.session_state.hcad_results.to_dict('records')
+                all_results.extend(batch_results)
+                
+                # Add to live results
+                for result in batch_results:
+                    st.session_state.live_results.append(result)
+                
+                # Update live display
+                if results_placeholder:
+                    self._update_live_results_display(results_placeholder)
+                
+                logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
+            else:
+                logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
         
         return all_results
     

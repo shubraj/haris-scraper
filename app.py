@@ -157,6 +157,9 @@ def _show_address_extraction_step():
         progress_bar = st.progress(0)
         status_text = st.empty()
         
+        # Create placeholders for live results
+        live_results_placeholder = st.empty()
+        
         # Auto-start address extraction with progress tracking
         try:
             # Update status
@@ -175,6 +178,9 @@ def _show_address_extraction_step():
                 # Update progress to complete
                 progress_bar.progress(1.0)
                 status_text.text("✅ Address extraction completed!")
+                
+                # Clear live results placeholder
+                live_results_placeholder.empty()
                 
                 st.session_state.final_results = df
                 st.session_state.workflow_step = "complete"
