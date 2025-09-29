@@ -70,16 +70,19 @@ class AddressExtractor:
 Your task is to:
 1. Extract addresses that belong to GRANTEES (property owners/recipients)
 2. Extract the GRANTEE NAMES associated with those addresses
-3. IGNORE addresses in legal descriptions, mailing addresses, or other non-grantee addresses
-4. Look for addresses that follow Grantees names or are clearly associated with property ownership
-5. Focus on residential/property addresses, not business mailing addresses
-6. Look for patterns like: "JOHN SMITH, 123 Main St, Houston, TX 77001" or "ABC LLC, 1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+3. If MULTIPLE grantees are found, extract the LATEST/MOST RECENT grantee and their address
+4. IGNORE addresses in legal descriptions, mailing addresses, or other non-grantee addresses
+5. Look for addresses that follow Grantees names or are clearly associated with property ownership
+6. Focus on residential/property addresses, not business mailing addresses
+7. Look for patterns like: "JOHN SMITH, 123 Main St, Houston, TX 77001" or "ABC LLC, 1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+8. Focus on the final grantee mentioned in the document (usually the current owner)
 
 IMPORTANT: Only extract addresses that are clearly associated with Grantees/property owners. Ignore:
 - Legal description addresses (Lot X, Block Y)
 - Mailing addresses of companies
 - Property addresses in legal descriptions
 - Any address not directly associated with a Grantee name
+- Previous/old grantees (only extract the latest/most recent)
 
 Return the results in JSON format with this structure:
 {
@@ -108,18 +111,21 @@ If no GRANTEES addresses are found, return: {"addresses": []}"""
 IMPORTANT: 
 1. Extract addresses that belong to Grantees (property owners)
 2. Extract the GRANTEE NAMES associated with those addresses
-3. Look for patterns like: "JOHN SMITH, 123 Main St, Houston, TX 77001" or "ABC LLC, 1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+3. If MULTIPLE grantees are found, extract the LATEST/MOST RECENT grantee and their address
+4. Look for patterns like: "JOHN SMITH, 123 Main St, Houston, TX 77001" or "ABC LLC, 1610 Crestdale Drive, Unit 4, Houston, Harris County, Texas 77080"
+5. Focus on the final grantee mentioned in the document (usually the current owner)
 
 IGNORE:
 - Legal description addresses (Lot X, Block Y, etc.)
 - Mailing addresses of companies
 - Property addresses in legal descriptions
 - Any address not directly associated with a Grantee name
+- Previous/old grantees (only extract the latest/most recent)
 
 Text to analyze:
 {text}
 
-Please extract GRANTEES addresses AND grantee names, returning them in the specified JSON format with both address and grantee_name fields."""
+Please extract the LATEST GRANTEE address AND grantee name, returning them in the specified JSON format with both address and grantee_name fields."""
     
     def _parse_response(self, response: str) -> List[Dict[str, str]]:
         """Parse the OpenAI response and extract addresses."""
