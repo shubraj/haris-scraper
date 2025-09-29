@@ -2,6 +2,7 @@
 HCAD (Harris County Appraisal District) property search scraper.
 """
 import asyncio
+import json
 import pandas as pd
 from playwright.async_api import async_playwright
 from typing import Dict, List, Optional, Any
@@ -31,7 +32,28 @@ class HCADScraper:
         self.num_tabs = NUM_TABS
         self.headless = HEADLESS_MODE
         self.browser_timeout = BROWSER_TIMEOUT
-        self.search_timeout = SEARCH_TIMEOUT
+        self.instrument_type_mapping = self._load_instrument_type_mapping()
+    
+    def _load_instrument_type_mapping(self) -> Dict[str, str]:
+        """Load instrument type mapping from JSON file (code -> name)."""
+        try:
+            with open('instrument_types.json', 'r') as f:
+                name_to_code = json.load(f)
+            
+            # Create reverse mapping (code -> name)
+            code_to_name = {code: name for name, code in name_to_code.items()}
+            return code_to_name
+            
+        except Exception as e:
+            return {}
+    
+    def _get_instrument_type_name(self, doc_type: str) -> str:
+        """Get human-readable instrument type name from code."""
+        if not doc_type:
+            return ''
+        
+        # Try to find the name for this code
+        return self.instrument_type_mapping.get(doc_type, doc_type)
     
     async def perform_single_search(self, page, search_name: str) -> Optional[str]:
         """
@@ -113,11 +135,44 @@ class HCADScraper:
                     "tbody tr.resulttr"
                 ]
                 
+                # First check for "No Results Found" message immediately
+                no_results_selectors = [
+                    "th:has-text('No Results Found')",
+                    "td:has-text('No Results Found')",
+                    "div:has-text('No Results Found')",
+                    "table:has-text('No Results Found')",
+                    "th[colspan='4']:has-text('No Results Found')",  # Specific to the HTML structure you mentioned
+                    ".card-body table th:has-text('No Results Found')"
+                ]
+                
+                no_results_found = False
+                for selector in no_results_selectors:
+                    try:
+                        await page.wait_for_selector(selector, timeout=2000)  # Quick check
+                        no_results_found = True
+                        print(f"Found 'No Results Found' message using selector: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if no_results_found:
+                    print("No results found for this search, skipping...")
+                    return None
+                
+                # Additional check: Look for any element containing "No Results Found" text
+                try:
+                    no_results_text = await page.locator("text=No Results Found").count()
+                    if no_results_text > 0:
+                        print("Found 'No Results Found' text on page, skipping...")
+                        return None
+                except:
+                    pass
+                
                 results_found = False
                 table_selector_used = None
                 for selector in table_selectors:
                     try:
-                        await page.wait_for_selector(selector, timeout=10000)
+                        await page.wait_for_selector(selector, timeout=5000)  # Reduced timeout
                         results_found = True
                         table_selector_used = selector
                         print(f"Found results table using selector: {selector}")
@@ -243,7 +298,7 @@ class HCADScraper:
             "address": address,
         }
     
-    async def worker(self, page, queue: asyncio.Queue, results: List[Dict], results_placeholder) -> None:
+    async def worker(self, page, queue: asyncio.Queue, results: List[Dict]) -> None:
         """
         Worker function for processing search queue.
         
@@ -251,7 +306,6 @@ class HCADScraper:
             page: Playwright page object
             queue: Queue of search tasks
             results: List to store results
-            results_placeholder: Streamlit placeholder for displaying results
         """
         first_run = True
         while not queue.empty():
@@ -263,29 +317,35 @@ class HCADScraper:
             result = await self.run_search(page, owner, legal_desc_clean, legal_desc_full, first_run=first_run)
 
             # Create standardized result format to match Step 2
+            # Get instrument type name from code
+            doc_type_code = row.get('DocType', '')
+            instrument_type_name = self._get_instrument_type_name(doc_type_code)
+            
+            # Debug: Log if DocType is missing
+            if not doc_type_code:
+                logger.warning(f"Missing DocType in HCAD record: {row.keys()}")
+            
             standardized_result = {
                 'Grantor': row.get('Grantors', ''),
                 'Grantee': row.get('Grantees', ''),
-                'Instrument Type': row.get('DocType', ''),
+                'Instrument Type': instrument_type_name,
                 'Recording Date': row.get('FileDate', ''),
-                'Film Code (Ref)': row.get('FilmCode', ''),
+                'Film Code': row.get('FilmCode', ''),
                 'Legal Description': row.get('LegalDescription', ''),
                 'Property Address': result["address"] or ''
             }
 
             results.append(standardized_result)
-            results_placeholder.dataframe(pd.DataFrame(results))
 
             first_run = False
             queue.task_done()
     
-    async def run_hcad_searches(self, df: pd.DataFrame, results_placeholder) -> None:
+    async def run_hcad_searches(self, df: pd.DataFrame) -> None:
         """
         Run HCAD searches for all rows in the DataFrame.
         
         Args:
             df: DataFrame with instrument data
-            results_placeholder: Streamlit placeholder for displaying results
         """
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=self.headless)
@@ -297,7 +357,7 @@ class HCADScraper:
                 await queue.put(row.to_dict())  # put full row as dict
 
             results = []
-            tasks = [asyncio.create_task(self.worker(tab, queue, results, results_placeholder)) for tab in tabs]
+            tasks = [asyncio.create_task(self.worker(tab, queue, results)) for tab in tabs]
             await queue.join()
             await asyncio.gather(*tasks)
             await asyncio.sleep(2)
@@ -310,13 +370,12 @@ class HCADScraper:
                 st.session_state.hcad_results = pd.DataFrame(results)
 
 
-async def run_hcad_searches(df: pd.DataFrame, results_placeholder) -> None:
+async def run_hcad_searches(df: pd.DataFrame) -> None:
     """
     Entry point for running HCAD searches from UI.
     
     Args:
         df: DataFrame with instrument data
-        results_placeholder: Streamlit placeholder for displaying results
     """
     scraper = HCADScraper()
-    await scraper.run_hcad_searches(df, results_placeholder)
+    await scraper.run_hcad_searches(df)

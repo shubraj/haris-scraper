@@ -104,18 +104,14 @@ class InstrumentScraperApp:
                 total_codes = len(code_to_keys)
                 
                 for i, (code, keys) in enumerate(code_to_keys.items()):
-                    st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
-                    
                     df = self._get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         # Keep the original DocType (code) for proper mapping in Step 2
                         # The unified address extractor will map codes to names
                         all_results.append(df)
                         logger.info(f"Scraped {len(df)} records for {', '.join(keys)}")
-                        st.success(f"Found {len(df)} records")
                     else:
                         logger.info(f"No records found for {', '.join(keys)}")
-                        st.info("No data found for this instrument type")
                     
                     progress_bar.progress((i + 1) / total_codes)
                 

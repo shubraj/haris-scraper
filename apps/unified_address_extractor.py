@@ -55,12 +55,13 @@ class UnifiedAddressExtractorApp:
         # Try to find the name for this code
         return self.instrument_type_mapping.get(doc_type, doc_type)
     
-    def run(self, records_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    def run(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """
         Run the unified address extraction application.
         
         Args:
             records_df: DataFrame with scraped records from Step 1
+            progress_callback: Optional callback function for progress updates
             
         Returns:
             DataFrame with extracted addresses or None if no data
@@ -69,35 +70,21 @@ class UnifiedAddressExtractorApp:
             st.warning("⚠️ No records available. Please complete Step 1 first.")
             return None
         
-        st.info(f"📊 Processing {len(records_df)} records for address extraction")
+        # Process records directly without button
+        results = self._process_all_records(records_df, progress_callback)
         
-        # Process with button
-        if st.button("🔍 Extract Addresses (PDF + HCAD Fallback)", type="primary"):
-            with st.spinner("Processing records and extracting addresses..."):
-                results = self._process_all_records(records_df)
-                
-                if results is not None and not results.empty:
-                    st.success(f"✅ Found addresses for {len(results)} records")
-                    
-                    # Display results
-                    st.write("### 📋 Final Results")
-                    self._display_results(results)
-                    
-                    # Download results
-                    self._download_results(results)
-                    
-                    return results
-                else:
-                    st.warning("⚠️ No addresses found for any records. Please check the data or try different search parameters.")
-                    return None
+        if results is not None and not results.empty:
+            return results
+        else:
+            return None
     
-    def _process_all_records(self, records_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    def _process_all_records(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """Process all records with PDF extraction and HCAD fallback."""
         try:
             logger.info(f"Starting unified address extraction for {len(records_df)} records")
             
             # Process records concurrently (5 at a time)
-            final_results = self._process_records_concurrent(records_df)
+            final_results = self._process_records_concurrent(records_df, progress_callback)
             
             if final_results:
                 final_df = pd.DataFrame(final_results)
@@ -114,20 +101,30 @@ class UnifiedAddressExtractorApp:
             st.error(f"Error processing records: {e}")
             return None
     
-    def _process_records_concurrent(self, records_df: pd.DataFrame) -> List[Dict]:
+    def _process_records_concurrent(self, records_df: pd.DataFrame, progress_callback=None) -> List[Dict]:
         """Process records with optimized PDF + HCAD batching."""
         records_list = records_df.to_dict('records')
         final_results = []
         hcad_records = []
         
         # Step 1: Process PDFs concurrently (5 at a time)
-        st.write("📄 **Step 1: PDF Extraction**")
-        pdf_results = self._process_pdfs_concurrent(records_list)
-        
-        # Add successful PDF results
-        for result in pdf_results:
-            if result:
-                final_results.append(result)
+        pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
+        if pdf_records:
+            if progress_callback:
+                progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
+            pdf_results = self._process_pdfs_concurrent(records_list)
+            
+            # Add successful PDF results
+            for result in pdf_results:
+                if result:
+                    final_results.append(result)
+            
+            if progress_callback:
+                progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
+        else:
+            if progress_callback:
+                progress_callback(0.1, "📄 No PDFs found, skipping PDF processing...")
+            pdf_results = []
         
         # Step 2: Collect records that need HCAD (no PDF or no address found)
         for record in records_list:
@@ -139,13 +136,20 @@ class UnifiedAddressExtractorApp:
         
         # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
         if hcad_records:
-            st.write(f"🔍 **Step 2: HCAD Search** - Processing {len(hcad_records)} records")
-            hcad_results = asyncio.run(self._process_hcad_batch(hcad_records))
+            if progress_callback:
+                progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
+            hcad_results = asyncio.run(self._process_hcad_batch(hcad_records, progress_callback))
             
             # Add successful HCAD results
             for result in hcad_results:
                 if result:
                     final_results.append(result)
+        else:
+            if progress_callback:
+                progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
+        
+        if progress_callback:
+            progress_callback(1.0, "✅ Address extraction completed!")
         
         return final_results
     
@@ -163,15 +167,9 @@ class UnifiedAddressExtractorApp:
         total_batches = (len(pdf_records) + batch_size - 1) // batch_size
         all_results = []
         
-        # Create progress bar
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
         for i in range(0, len(pdf_records), batch_size):
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
-            
-            status_text.text(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} records)")
             
             # Process batch concurrently (3 workers for optimal rate limit usage)
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -199,16 +197,10 @@ class UnifiedAddressExtractorApp:
                         batch_results.append(None)
                 
                 all_results.extend(batch_results)
-            
-            # Update progress bar
-            progress_bar.progress(batch_num / total_batches)
-        
-        # Clear status text
-        status_text.text("✅ PDF processing completed!")
         
         return all_results
     
-    async def _process_hcad_batch(self, hcad_records: List[Dict]) -> List[Optional[Dict]]:
+    async def _process_hcad_batch(self, hcad_records: List[Dict], progress_callback=None) -> List[Optional[Dict]]:
         """Process HCAD records in batches to utilize HCAD's 5 tabs efficiently."""
         if not hcad_records:
             return []
@@ -218,15 +210,15 @@ class UnifiedAddressExtractorApp:
         total_batches = (len(hcad_records) + batch_size - 1) // batch_size
         all_results = []
         
-        # Create progress bar for HCAD
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
         for i in range(0, len(hcad_records), batch_size):
             batch = hcad_records[i:i + batch_size]
             batch_num = i // batch_size + 1
+            processed_count = min(i + batch_size, len(hcad_records))
             
-            status_text.text(f"🔍 Processing HCAD batch {batch_num}/{total_batches} ({len(batch)} records)")
+            # Update progress with X/Y format
+            if progress_callback:
+                progress_value = 0.6 + (0.4 * (batch_num / total_batches))  # 60% to 100%
+                progress_callback(progress_value, f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches)")
             
             # Create DataFrame for this batch
             hcad_df = pd.DataFrame(batch)
@@ -236,8 +228,7 @@ class UnifiedAddressExtractorApp:
                 del st.session_state.hcad_results
             
             # Run HCAD search for this batch
-            results_placeholder = st.empty()
-            await run_hcad_searches(hcad_df, results_placeholder)
+            await run_hcad_searches(hcad_df)
             
             # Get results
             if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
@@ -247,11 +238,7 @@ class UnifiedAddressExtractorApp:
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
             
-            # Update progress bar
-            progress_bar.progress(batch_num / total_batches)
-        
-        # Clear status text
-        status_text.text("✅ HCAD processing completed!")
+            # Progress is handled by the progress_callback above
         
         return all_results
     
@@ -306,18 +293,14 @@ class UnifiedAddressExtractorApp:
         
         try:
             results = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
             
             for i, (index, record) in enumerate(pdf_records.iterrows()):
                 record_id = record.get('FileNo', f'record_{index}')
-                status_text.text(f"Processing PDF {i+1}/{len(pdf_records)}: {record_id}")
                 
                 # Download PDF
                 pdf_path = self._download_pdf(record)
                 if not pdf_path:
                     results.append(self._create_result_record(record, '', 'PDF download failed'))
-                    progress_bar.progress((i + 1) / len(pdf_records))
                     continue
                 
                 # Extract text and addresses
@@ -345,10 +328,6 @@ class UnifiedAddressExtractorApp:
                 finally:
                     if os.path.exists(pdf_path):
                         os.remove(pdf_path)
-                
-                progress_bar.progress((i + 1) / len(pdf_records))
-            
-            status_text.text("✅ PDF processing completed!")
             return pd.DataFrame(results) if results else pd.DataFrame()
             
         except Exception as e:
@@ -413,13 +392,13 @@ class UnifiedAddressExtractorApp:
         doc_type_code = original_record.get('DocType', '')
         instrument_type_name = self._get_instrument_type_name(doc_type_code)
         
+        # Return only the specified columns in the correct order
         return {
-            'FileNo': original_record.get('FileNo', ''),
             'Grantor': original_record.get('Grantors', ''),
             'Grantee': original_record.get('Grantees', ''),
             'Instrument Type': instrument_type_name,
             'Recording Date': original_record.get('FileDate', ''),
-            'Film Code (Ref)': original_record.get('FilmCode', ''),
+            'Film Code': original_record.get('FilmCode', ''),
             'Legal Description': original_record.get('LegalDescription', ''),
             'Property Address': property_address
         }
@@ -454,15 +433,16 @@ class UnifiedAddressExtractorApp:
         )
 
 
-def run_app2_unified(records_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+def run_app2_unified(records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
     """
     Convenience function to run the unified address extraction app.
     
     Args:
         records_df: DataFrame with scraped records from Step 1
+        progress_callback: Optional callback function for progress updates
         
     Returns:
         DataFrame with extracted addresses or None
     """
     app = UnifiedAddressExtractorApp()
-    return app.run(records_df)
+    return app.run(records_df, progress_callback)
