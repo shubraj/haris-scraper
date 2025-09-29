@@ -70,12 +70,20 @@ class UnifiedAddressExtractorApp:
             st.warning("⚠️ No records available. Please complete Step 1 first.")
             return None
         
+        # Check if processing should be stopped
+        if st.session_state.get('processing_state') != 'processing':
+            st.info("⏹️ Processing stopped by user.")
+            return None
+        
         # Process records directly without button
         results = self._process_all_records(records_df, progress_callback)
         
         if results is not None and not results.empty:
+            # Mark processing as completed
+            st.session_state.processing_state = "completed"
             return results
         else:
+            st.session_state.processing_state = "error"
             return None
     
     def _process_all_records(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
@@ -117,21 +125,12 @@ class UnifiedAddressExtractorApp:
         results_placeholder = st.empty()
         status_placeholder = st.empty()
         
-        # Check for stop signal before starting
-        if st.session_state.get('stop_processing', False):
-            return final_results
-        
         # Step 1: Process PDFs concurrently (5 at a time)
         pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
         if pdf_records:
             if progress_callback:
-                if not progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs..."):
-                    return final_results
+                progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
             pdf_results = self._process_pdfs_concurrent_with_live_updates(records_list, results_placeholder, status_placeholder)
-            
-            # Check for stop signal after PDF processing
-            if st.session_state.get('stop_processing', False):
-                return final_results
             
             # Add successful PDF results
             for result in pdf_results:
@@ -140,12 +139,10 @@ class UnifiedAddressExtractorApp:
                     st.session_state.live_results.append(result)
             
             if progress_callback:
-                if not progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses..."):
-                    return final_results
+                progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
         else:
             if progress_callback:
-                if not progress_callback(0.1, "📄 No PDFs found, skipping PDF processing..."):
-                    return final_results
+                progress_callback(0.1, "📄 No PDFs found, skipping PDF processing...")
             pdf_results = []
         
         # Step 2: Collect records that need HCAD (no PDF or no address found)
@@ -159,8 +156,7 @@ class UnifiedAddressExtractorApp:
         # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
         if hcad_records:
             if progress_callback:
-                if not progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records..."):
-                    return final_results
+                progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
             hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
             
             # Add successful HCAD results
@@ -170,8 +166,7 @@ class UnifiedAddressExtractorApp:
                     st.session_state.live_results.append(result)
         else:
             if progress_callback:
-                if not progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs"):
-                    return final_results
+                progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
         
         if progress_callback:
             progress_callback(1.0, "✅ Address extraction completed!")
@@ -238,6 +233,11 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(pdf_records), batch_size):
+            # Check if processing should be stopped
+            if st.session_state.get('processing_state') != 'processing':
+                logger.info("Processing stopped by user during PDF processing")
+                break
+                
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
@@ -265,14 +265,6 @@ class UnifiedAddressExtractorApp:
                             # Add to live results and update display
                             st.session_state.live_results.append(result)
                             self._update_live_results_display(results_placeholder)
-                            
-                            # Save state periodically during processing
-                            if len(st.session_state.live_results) % 5 == 0:  # Save every 5 results
-                                try:
-                                    from app import save_state
-                                    save_state()
-                                except:
-                                    pass  # Ignore save errors during processing
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -318,6 +310,11 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(hcad_records), batch_size):
+            # Check if processing should be stopped
+            if st.session_state.get('processing_state') != 'processing':
+                logger.info("Processing stopped by user during HCAD processing")
+                break
+                
             batch = hcad_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             processed_count = min(i + batch_size, len(hcad_records))
@@ -353,13 +350,6 @@ class UnifiedAddressExtractorApp:
                 # Update live display with all accumulated results
                 if results_placeholder:
                     self._update_live_results_display(results_placeholder)
-                
-                # Save state after each HCAD batch
-                try:
-                    from app import save_state
-                    save_state()
-                except:
-                    pass  # Ignore save errors during processing
                 
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
             else:
