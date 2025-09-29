@@ -78,9 +78,33 @@ class UnifiedAddressExtractorApp:
         else:
             return None
     
+    def _clear_session_data(self):
+        """Clear all session state data for a fresh start."""
+        # Clear all processing data
+        if 'live_results' in st.session_state:
+            del st.session_state.live_results
+        if 'live_results_df' in st.session_state:
+            del st.session_state.live_results_df
+        if 'pdf_processed' in st.session_state:
+            del st.session_state.pdf_processed
+        if 'hcad_processed' in st.session_state:
+            del st.session_state.hcad_processed
+        if 'hcad_results' in st.session_state:
+            del st.session_state.hcad_results
+        
+        # Reset counters
+        st.session_state.pdf_processed = 0
+        st.session_state.hcad_processed = 0
+        st.session_state.live_results = []
+        
+        logger.info("Cleared all session data for fresh start")
+
     def _process_all_records(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """Process all records with PDF extraction and HCAD fallback."""
         try:
+            # Clear all previous data for a fresh start
+            self._clear_session_data()
+            
             logger.info(f"Starting unified address extraction for {len(records_df)} records")
             
             # Process records concurrently (5 at a time)
@@ -103,6 +127,9 @@ class UnifiedAddressExtractorApp:
     
     def _process_records_concurrent(self, records_df: pd.DataFrame, progress_callback=None) -> List[Dict]:
         """Process records with optimized PDF + HCAD batching."""
+        # Clear all previous data for a fresh start
+        self._clear_session_data()
+        
         records_list = records_df.to_dict('records')
         final_results = []
         hcad_records = []

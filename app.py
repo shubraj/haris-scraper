@@ -125,6 +125,27 @@ def main():
             st.info("🧪 Test mode enabled - Processing only 10 PDFs")
         
         st.markdown("---")
+        st.markdown("### 🗑️ Data Management")
+        if st.button("Clear All Data", help="Clear all session data and start fresh"):
+            # Clear all processing-related session state
+            keys_to_clear = [
+                'scraped_data', 'final_results', 'workflow_step',
+                'live_results', 'live_results_df', 'total_processed',
+                'pdf_processed', 'hcad_processed', 'hcad_results'
+            ]
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Clear any stale file references
+            for key in list(st.session_state.keys()):
+                if key.startswith('file_') or key.endswith('_file'):
+                    del st.session_state[key]
+            
+            st.success("✅ All data cleared! Ready for a fresh start.")
+            st.rerun()
+        
+        st.markdown("---")
         st.markdown("### 🎯 Features")
         st.markdown("""
         - **Concurrent Processing**: Fast PDF and HCAD processing
