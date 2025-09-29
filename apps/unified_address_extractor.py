@@ -185,7 +185,12 @@ class UnifiedAddressExtractorApp:
                 pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
                 if not pdf_result or not pdf_result.get('Property Address', '').strip():
                     # PDF processing didn't find address - needs HCAD
-                    hcad_records.append(record)
+                    # Use updated grantee name from PDF processing if available
+                    updated_record = record.copy()
+                    if pdf_result and pdf_result.get('Grantee') and pdf_result.get('Grantee') != record.get('Grantees', ''):
+                        updated_record['Grantees'] = pdf_result.get('Grantee')
+                        logger.info(f"🔄 {record_id}: Using updated grantee name '{pdf_result.get('Grantee')}' for HCAD search")
+                    hcad_records.append(updated_record)
                     logger.debug(f"Record {record_id}: PDF processing failed/no address - adding to HCAD")
                 else:
                     logger.debug(f"Record {record_id}: PDF processing found address - skipping HCAD")
@@ -293,10 +298,19 @@ class UnifiedAddressExtractorApp:
                 for future in as_completed(future_to_record):
                     record = future_to_record[future]
                     try:
-                        pdf_address = future.result()
+                        pdf_result = future.result()
                         st.session_state.pdf_processed += 1  # Track PDF processed
                         
-                        if pdf_address:
+                        if pdf_result:
+                            pdf_address = pdf_result.get('address', '') if isinstance(pdf_result, dict) else pdf_result
+                            pdf_grantee_name = pdf_result.get('grantee_name', '') if isinstance(pdf_result, dict) else ''
+                            
+                            # Use PDF grantee name if original grantee is "SEE INSTRUMENT"
+                            if record.get('Grantee', '').strip() == 'SEE INSTRUMENT' and pdf_grantee_name:
+                                record = record.copy()  # Don't modify original
+                                record['Grantee'] = pdf_grantee_name
+                                logger.info(f"🔄 {record.get('FileNo', 'unknown')}: Updated grantee from 'SEE INSTRUMENT' to '{pdf_grantee_name}'")
+                            
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
@@ -308,8 +322,6 @@ class UnifiedAddressExtractorApp:
                                 # Update live display immediately
                                 if results_placeholder:
                                     self._update_live_results_display(results_placeholder)
-                                    # Small delay to make updates visible
-                                    time.sleep(0.1)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -418,9 +430,6 @@ class UnifiedAddressExtractorApp:
                 addresses_found = len([r for r in st.session_state.live_results if r.get('Property Address', '').strip()])
                 status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Addresses found so far: {addresses_found}")
                 
-                # Small delay to make updates visible
-                await asyncio.sleep(0.5)
-                
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses, added {added_count} new")
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
@@ -470,8 +479,8 @@ class UnifiedAddressExtractorApp:
         return all_results
     
     
-    def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
-        """Try to extract address from PDF for a single record with optimized rate limit handling."""
+    def _try_pdf_extraction(self, record: Dict) -> Optional[Dict]:
+        """Try to extract address and grantee name from PDF for a single record with optimized rate limit handling."""
         max_retries = 2  # Reduced retries for faster processing
         retry_delay = 3  # Reduced delay for faster recovery
         
@@ -492,7 +501,13 @@ class UnifiedAddressExtractorApp:
                 if pdf_text.strip():
                     addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
                     if addresses:
-                        return self.address_extractor.standardize_address(addresses[0])
+                        address = self.address_extractor.standardize_address(addresses[0])
+                        # Extract grantee name if available
+                        grantee_name = addresses[0].get('grantee_name', '') if isinstance(addresses[0], dict) else ''
+                        return {
+                            'address': address,
+                            'grantee_name': grantee_name
+                        }
                 
                 return None
                 
@@ -622,11 +637,14 @@ class UnifiedAddressExtractorApp:
         doc_type_code = original_record.get('DocType', '')
         instrument_type_name = self._get_instrument_type_name(doc_type_code)
         
+        # Use updated grantee name if available (from PDF extraction)
+        grantee_name = original_record.get('Grantee', original_record.get('Grantees', ''))
+        
         # Return only the specified columns in the correct order
         return {
             'FileNo': original_record.get('FileNo', ''),
             'Grantor': original_record.get('Grantors', ''),
-            'Grantee': original_record.get('Grantees', ''),
+            'Grantee': grantee_name,
             'Instrument Type': instrument_type_name,
             'Recording Date': original_record.get('FileDate', ''),
             'Film Code': original_record.get('FilmCode', ''),

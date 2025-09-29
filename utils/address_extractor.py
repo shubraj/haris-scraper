@@ -102,18 +102,21 @@ If no GRANTEES addresses are found, return: {"addresses": []}"""
     
     def _create_extraction_prompt(self, text: str, context: str) -> str:
         """Create the extraction prompt for OpenAI."""
-        return f"""Extract ONLY GRANTEES addresses from the following {context} text. 
+        return f"""Extract GRANTEES addresses and names from the following {context} text. 
 
-IMPORTANT: Only extract addresses that belong to Grantees (property owners). Ignore:
-- Legal description addresses (Lot X, Block Y, etc.)
-- Mailing addresses of companies
-- Property addresses in legal descriptions
-- Any address not directly associated with a Grantee name
+IMPORTANT: 
+1. Extract addresses that belong to Grantees (property owners)
+2. If a Grantee is listed as "SEE INSTRUMENT", extract the actual grantee name from the document text
+3. Ignore:
+   - Legal description addresses (Lot X, Block Y, etc.)
+   - Mailing addresses of companies
+   - Property addresses in legal descriptions
+   - Any address not directly associated with a Grantee name
 
 Text to analyze:
 {text}
 
-Please extract only GRANTEES addresses and return them in the specified JSON format."""
+Please extract GRANTEES addresses and names, and return them in the specified JSON format. If a grantee is "SEE INSTRUMENT", find the actual name in the document."""
     
     def _parse_response(self, response: str) -> List[Dict[str, str]]:
         """Parse the OpenAI response and extract addresses."""
