@@ -209,6 +209,9 @@ def main():
         elif st.session_state.stop_processing:
             st.warning("⏹️ **State Recovered**: Processing was stopped. You can retry or start fresh.")
     
+    # Store state_loaded in session state for access in other functions
+    st.session_state.state_loaded = state_loaded
+    
     # Main workflow
     if st.session_state.workflow_step == "scrape":
         _show_scraping_step()
@@ -289,7 +292,7 @@ def _show_address_extraction_step(auto_continue=False):
         live_results_placeholder = st.empty()
         
         # Show existing live results if state was recovered and we have results
-        if state_loaded and st.session_state.live_results:
+        if st.session_state.get('state_loaded', False) and st.session_state.live_results:
             # Calculate progress based on existing results
             total_records = len(st.session_state.scraped_data)
             processed_count = len(st.session_state.live_results)
