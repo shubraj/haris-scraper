@@ -7,6 +7,9 @@ property addresses with AI-powered PDF processing and HCAD fallback.
 import streamlit as st
 import os
 import pandas as pd
+import json
+import pickle
+from datetime import datetime
 from apps.instrument_scraper import run_app1
 from apps.unified_address_extractor import run_app2_unified
 from utils.logger_config import get_app_logger
@@ -16,6 +19,75 @@ logger = get_app_logger()
 
 # Install Playwright
 os.system("playwright install")
+
+# State persistence functions
+def save_state():
+    """Save current session state to file."""
+    try:
+        state_data = {
+            'scraped_data': st.session_state.scraped_data,
+            'final_results': st.session_state.final_results,
+            'workflow_step': st.session_state.workflow_step,
+            'processing_started': st.session_state.processing_started,
+            'processing_completed': st.session_state.processing_completed,
+            'processing_error': st.session_state.processing_error,
+            'stop_processing': st.session_state.stop_processing,
+            'live_results': st.session_state.get('live_results', []),
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Save to file
+        with open('session_state.pkl', 'wb') as f:
+            pickle.dump(state_data, f)
+        
+        logger.info("Session state saved successfully")
+    except Exception as e:
+        logger.error(f"Failed to save session state: {e}")
+
+def load_state():
+    """Load session state from file."""
+    try:
+        if os.path.exists('session_state.pkl'):
+            with open('session_state.pkl', 'rb') as f:
+                state_data = pickle.load(f)
+            
+            # Check if state is recent (within last 24 hours)
+            if 'timestamp' in state_data:
+                state_time = datetime.fromisoformat(state_data['timestamp'])
+                if (datetime.now() - state_time).total_seconds() < 24 * 3600:  # 24 hours
+                    # Load state
+                    st.session_state.scraped_data = state_data.get('scraped_data')
+                    st.session_state.final_results = state_data.get('final_results')
+                    st.session_state.workflow_step = state_data.get('workflow_step', 'scrape')
+                    st.session_state.processing_started = state_data.get('processing_started', False)
+                    st.session_state.processing_completed = state_data.get('processing_completed', False)
+                    st.session_state.processing_error = state_data.get('processing_error')
+                    st.session_state.stop_processing = state_data.get('stop_processing', False)
+                    st.session_state.live_results = state_data.get('live_results', [])
+                    
+                    logger.info("Session state loaded successfully")
+                    return True
+                else:
+                    logger.info("Session state is too old, starting fresh")
+                    return False
+            else:
+                logger.info("No timestamp in saved state, starting fresh")
+                return False
+        else:
+            logger.info("No saved session state found")
+            return False
+    except Exception as e:
+        logger.error(f"Failed to load session state: {e}")
+        return False
+
+def clear_state():
+    """Clear saved state file."""
+    try:
+        if os.path.exists('session_state.pkl'):
+            os.remove('session_state.pkl')
+        logger.info("Session state cleared")
+    except Exception as e:
+        logger.error(f"Failed to clear session state: {e}")
 
 def main():
     """Main application entry point."""
@@ -104,21 +176,36 @@ def main():
         - **Rate Limiting**: Optimized for API limits
         """)
     
-    # Initialize session state
-    if "scraped_data" not in st.session_state:
-        st.session_state.scraped_data = None
-    if "final_results" not in st.session_state:
-        st.session_state.final_results = None
-    if "workflow_step" not in st.session_state:
-        st.session_state.workflow_step = "scrape"
-    if "processing_started" not in st.session_state:
-        st.session_state.processing_started = False
-    if "processing_completed" not in st.session_state:
-        st.session_state.processing_completed = False
-    if "processing_error" not in st.session_state:
-        st.session_state.processing_error = None
-    if "stop_processing" not in st.session_state:
-        st.session_state.stop_processing = False
+    # Try to load existing state first
+    state_loaded = load_state()
+    
+    # Initialize session state (only if not loaded from file)
+    if not state_loaded:
+        if "scraped_data" not in st.session_state:
+            st.session_state.scraped_data = None
+        if "final_results" not in st.session_state:
+            st.session_state.final_results = None
+        if "workflow_step" not in st.session_state:
+            st.session_state.workflow_step = "scrape"
+        if "processing_started" not in st.session_state:
+            st.session_state.processing_started = False
+        if "processing_completed" not in st.session_state:
+            st.session_state.processing_completed = False
+        if "processing_error" not in st.session_state:
+            st.session_state.processing_error = None
+        if "stop_processing" not in st.session_state:
+            st.session_state.stop_processing = False
+        if "live_results" not in st.session_state:
+            st.session_state.live_results = []
+    
+    # Show state recovery message if loaded
+    if state_loaded:
+        if st.session_state.processing_started and not st.session_state.processing_completed and not st.session_state.stop_processing:
+            st.info("🔄 **State Recovered**: Processing was in progress. You can continue or stop the process.")
+        elif st.session_state.processing_completed:
+            st.success("✅ **State Recovered**: Processing was completed. Showing results...")
+        elif st.session_state.stop_processing:
+            st.warning("⏹️ **State Recovered**: Processing was stopped. You can retry or start fresh.")
     
     # Main workflow
     if st.session_state.workflow_step == "scrape":
@@ -147,6 +234,7 @@ def _show_scraping_step():
         
         # Auto-start address extraction
         st.session_state.workflow_step = "extract"
+        save_state()  # Save state before moving to extraction
         st.rerun()
 
 def _show_address_extraction_step():
@@ -162,6 +250,7 @@ def _show_address_extraction_step():
         if st.session_state.processing_completed:
             st.success("✅ Address extraction completed! Moving to results...")
             st.session_state.workflow_step = "complete"
+            save_state()  # Save state before moving to results
             st.rerun()
             return
         
@@ -171,6 +260,7 @@ def _show_address_extraction_step():
             if st.button("🔄 Retry Processing"):
                 st.session_state.processing_error = None
                 st.session_state.processing_started = False
+                save_state()  # Save state after retry
                 st.rerun()
             return
         
@@ -182,6 +272,7 @@ def _show_address_extraction_step():
             with col2:
                 if st.button("⏹️ Stop Processing", type="secondary"):
                     st.session_state.stop_processing = True
+                    save_state()  # Save state when stopping
                     st.rerun()
         
         # Simple progress display
@@ -201,6 +292,7 @@ def _show_address_extraction_step():
             st.session_state.processing_started = True
             st.session_state.stop_processing = False
             st.session_state.processing_error = None
+            save_state()  # Save state when starting processing
             
             # Auto-start address extraction with progress tracking
             try:
@@ -235,6 +327,7 @@ def _show_address_extraction_step():
                     st.session_state.final_results = df
                     st.session_state.processing_completed = True
                     st.session_state.workflow_step = "complete"
+                    save_state()  # Save state when processing completes
                     st.rerun()
                 else:
                     progress_bar.progress(0)
@@ -254,6 +347,7 @@ def _show_address_extraction_step():
                 st.session_state.stop_processing = False
                 st.session_state.processing_started = False
                 st.session_state.processing_error = None
+                save_state()  # Save state when retrying
                 st.rerun()
     else:
         st.warning("⚠️ No scraped data available. Please restart the process.")
@@ -334,6 +428,7 @@ def _show_final_results():
                 del st.session_state.live_results
             if 'live_results_df' in st.session_state:
                 del st.session_state.live_results_df
+            clear_state()  # Clear saved state file
             st.rerun()
 
 

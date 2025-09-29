@@ -265,6 +265,14 @@ class UnifiedAddressExtractorApp:
                             # Add to live results and update display
                             st.session_state.live_results.append(result)
                             self._update_live_results_display(results_placeholder)
+                            
+                            # Save state periodically during processing
+                            if len(st.session_state.live_results) % 5 == 0:  # Save every 5 results
+                                try:
+                                    from app import save_state
+                                    save_state()
+                                except:
+                                    pass  # Ignore save errors during processing
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -345,6 +353,13 @@ class UnifiedAddressExtractorApp:
                 # Update live display with all accumulated results
                 if results_placeholder:
                     self._update_live_results_display(results_placeholder)
+                
+                # Save state after each HCAD batch
+                try:
+                    from app import save_state
+                    save_state()
+                except:
+                    pass  # Ignore save errors during processing
                 
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
             else:
