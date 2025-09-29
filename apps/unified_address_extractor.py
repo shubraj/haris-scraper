@@ -169,11 +169,8 @@ class UnifiedAddressExtractorApp:
                 progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
             hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
             
-            # Add successful HCAD results
-            for result in hcad_results:
-                if result:
-                    final_results.append(result)
-                    st.session_state.live_results.append(result)
+            # Add successful HCAD results to final_results (already added to live_results in batch processing)
+            final_results.extend(hcad_results)
         else:
             if progress_callback:
                 progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
