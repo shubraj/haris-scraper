@@ -199,9 +199,11 @@ def main():
             st.session_state.live_results = []
     
     # Show state recovery message if loaded
+    auto_continue_processing = False
     if state_loaded:
         if st.session_state.processing_started and not st.session_state.processing_completed and not st.session_state.stop_processing:
-            st.info("🔄 **State Recovered**: Processing was in progress. You can continue or stop the process.")
+            st.info("🔄 **State Recovered**: Processing was in progress. Showing current progress and results...")
+            auto_continue_processing = True
         elif st.session_state.processing_completed:
             st.success("✅ **State Recovered**: Processing was completed. Showing results...")
         elif st.session_state.stop_processing:
@@ -211,7 +213,7 @@ def main():
     if st.session_state.workflow_step == "scrape":
         _show_scraping_step()
     elif st.session_state.workflow_step == "extract":
-        _show_address_extraction_step()
+        _show_address_extraction_step(auto_continue_processing)
     elif st.session_state.workflow_step == "complete":
         _show_final_results()
 
@@ -237,7 +239,7 @@ def _show_scraping_step():
         save_state()  # Save state before moving to extraction
         st.rerun()
 
-def _show_address_extraction_step():
+def _show_address_extraction_step(auto_continue=False):
     """Show the address extraction step."""
     # Header section
     with st.container():
@@ -286,8 +288,40 @@ def _show_address_extraction_step():
         # Create placeholders for live results
         live_results_placeholder = st.empty()
         
+        # Show existing live results if state was recovered and we have results
+        if state_loaded and st.session_state.live_results:
+            # Calculate progress based on existing results
+            total_records = len(st.session_state.scraped_data)
+            processed_count = len(st.session_state.live_results)
+            progress_value = min(0.9, processed_count / total_records) if total_records > 0 else 0.9
+            
+            # Update progress bar and status
+            progress_bar.progress(progress_value)
+            status_text.text(f"🔄 Resuming processing... {processed_count}/{total_records} records processed")
+            
+            # Show existing live results
+            from apps.unified_address_extractor import UnifiedAddressExtractorApp
+            extractor = UnifiedAddressExtractorApp()
+            extractor._update_live_results_display(live_results_placeholder)
+            
+            # Show continue button if processing was in progress
+            if st.session_state.processing_started and not st.session_state.processing_completed and not st.session_state.stop_processing:
+                st.markdown("---")
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.info("💡 **Continue Processing**: Click below to resume address extraction from where it left off.")
+                with col2:
+                    if st.button("▶️ Continue Processing", type="primary"):
+                        # Continue processing from where it left off
+                        st.rerun()
+                with col3:
+                    if st.button("⏹️ Stop Processing", type="secondary"):
+                        st.session_state.stop_processing = True
+                        save_state()
+                        st.rerun()
+        
         # Start or continue processing
-        if not st.session_state.processing_started and not st.session_state.stop_processing:
+        if (not st.session_state.processing_started and not st.session_state.stop_processing) or auto_continue:
             # Start processing
             st.session_state.processing_started = True
             st.session_state.stop_processing = False
