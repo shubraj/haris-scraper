@@ -172,10 +172,10 @@ class UnifiedAddressExtractorApp:
         if not pdf_records:
             return []
         
-        # Process in batches of 3 (optimized for OpenAI rate limits: 400 RPM, 160k TPM)
-        # Rate limit calculation: 3 workers × 3 batches/min = 9 requests/min per batch
-        # With 0.5s delay between batches: ~120 requests/min (well under 400 RPM limit)
-        batch_size = 3
+        # Process in batches of 5 (optimized for OpenAI rate limits: 400 RPM, 160k TPM)
+        # Rate limit calculation: 5 workers × 3 batches/min = 15 requests/min per batch
+        # With 0.5s delay between batches: ~180 requests/min (well under 400 RPM limit)
+        batch_size = 5
         total_batches = (len(pdf_records) + batch_size - 1) // batch_size
         all_results = []
         
@@ -183,8 +183,8 @@ class UnifiedAddressExtractorApp:
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
-            # Process batch concurrently (3 workers for optimal rate limit usage)
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            # Process batch concurrently (5 workers for optimal rate limit usage)
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 # Submit all tasks in the batch
                 future_to_record = {
                     executor.submit(self._try_pdf_extraction, record): record 
@@ -219,8 +219,8 @@ class UnifiedAddressExtractorApp:
         if not pdf_records:
             return []
         
-        # Process in batches of 3 (optimized for OpenAI rate limits)
-        batch_size = 3
+        # Process in batches of 5 (optimized for OpenAI rate limits)
+        batch_size = 5
         total_batches = (len(pdf_records) + batch_size - 1) // batch_size
         all_results = []
         
@@ -233,7 +233,7 @@ class UnifiedAddressExtractorApp:
             status_placeholder.info(f"📄 PDF Processing: {processed_count}/{len(pdf_records)} records ({batch_num}/{total_batches} batches) - Total results so far: {len(st.session_state.live_results)}")
             
             # Process batch concurrently
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_record = {
                     executor.submit(self._try_pdf_extraction, record): record 
                     for record in batch
