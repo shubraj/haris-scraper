@@ -114,6 +114,8 @@ class UnifiedAddressExtractorApp:
             st.session_state.live_results_df = pd.DataFrame()
         if 'total_processed' not in st.session_state:
             st.session_state.total_processed = 0
+        if 'pdf_processed' not in st.session_state:
+            st.session_state.pdf_processed = 0
         
         # Create live results display
         results_placeholder = st.empty()
@@ -247,7 +249,7 @@ class UnifiedAddressExtractorApp:
                     record = future_to_record[future]
                     try:
                         pdf_address = future.result()
-                        st.session_state.total_processed += 1  # Track total processed
+                        st.session_state.pdf_processed += 1  # Track PDF processed
                         
                         if pdf_address:
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
@@ -263,7 +265,7 @@ class UnifiedAddressExtractorApp:
                         record_id = record.get('FileNo', 'unknown')
                         logger.error(f"Error processing PDF for record {record_id}: {e}")
                         batch_results.append(None)
-                        st.session_state.total_processed += 1  # Still count as processed even if failed
+                        st.session_state.pdf_processed += 1  # Still count as processed even if failed
                 
                 all_results.extend(batch_results)
         
@@ -280,12 +282,12 @@ class UnifiedAddressExtractorApp:
                 st.markdown("### 📊 Live Results (Updated in Real-Time)")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Records Processed", st.session_state.total_processed)
+                    st.metric("Records Processed", st.session_state.pdf_processed)
                 with col2:
                     addresses_found = len(live_df[live_df['Property Address'] != ''])
                     st.metric("Addresses Found", addresses_found)
                 with col3:
-                    success_rate = (addresses_found / st.session_state.total_processed) * 100 if st.session_state.total_processed > 0 else 0
+                    success_rate = (addresses_found / st.session_state.pdf_processed) * 100 if st.session_state.pdf_processed > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
                 
                 # Show ALL results accumulated so far
@@ -331,9 +333,6 @@ class UnifiedAddressExtractorApp:
                 batch_results = st.session_state.hcad_results.to_dict('records')
                 all_results.extend(batch_results)
                 
-                # Track total processed for HCAD batch
-                st.session_state.total_processed += len(batch)
-                
                 # Add to live results and update display immediately
                 for result in batch_results:
                     st.session_state.live_results.append(result)
@@ -345,8 +344,6 @@ class UnifiedAddressExtractorApp:
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
-                # Still count as processed even if no results
-                st.session_state.total_processed += len(batch)
         
         return all_results
     
