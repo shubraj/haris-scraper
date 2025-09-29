@@ -305,6 +305,11 @@ class UnifiedAddressExtractorApp:
                             existing_file_nos = [r.get('FileNo') for r in st.session_state.live_results if r.get('FileNo')]
                             if result.get('FileNo') not in existing_file_nos:
                                 st.session_state.live_results.append(result)
+                                # Update live display immediately
+                                if results_placeholder:
+                                    self._update_live_results_display(results_placeholder)
+                                    # Small delay to make updates visible
+                                    time.sleep(0.1)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -358,8 +363,8 @@ class UnifiedAddressExtractorApp:
         if not hcad_records:
             return []
         
-        # Process in batches of 10
-        batch_size = 10
+        # Process in smaller batches for more frequent live updates
+        batch_size = 5
         total_batches = (len(hcad_records) + batch_size - 1) // batch_size
         all_results = []
         
@@ -408,6 +413,13 @@ class UnifiedAddressExtractorApp:
                 # Update live display with all accumulated results
                 if results_placeholder:
                     self._update_live_results_display(results_placeholder)
+                
+                # Update status with immediate results
+                addresses_found = len([r for r in st.session_state.live_results if r.get('Property Address', '').strip()])
+                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Addresses found so far: {addresses_found}")
+                
+                # Small delay to make updates visible
+                await asyncio.sleep(0.5)
                 
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses, added {added_count} new")
             else:
