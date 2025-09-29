@@ -231,6 +231,11 @@ class UnifiedAddressExtractorApp:
         """Process PDFs concurrently with live results display."""
         pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
         
+        # Test mode: limit to 10 PDFs for faster testing
+        if st.session_state.get('test_mode', False) and len(pdf_records) > 10:
+            pdf_records = pdf_records[:10]
+            logger.info(f"🧪 Test mode enabled: Processing only {len(pdf_records)} PDFs instead of {len([r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()])}")
+        
         if not pdf_records:
             return []
         

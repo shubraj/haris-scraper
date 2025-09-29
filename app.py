@@ -113,6 +113,18 @@ def main():
         """)
         
         st.markdown("---")
+        st.markdown("### 🧪 Test Mode")
+        test_mode = st.checkbox(
+            "Enable Test Mode", 
+            value=st.session_state.get('test_mode', False),
+            help="Process only 10 PDFs for faster testing"
+        )
+        st.session_state.test_mode = test_mode
+        
+        if test_mode:
+            st.info("🧪 Test mode enabled - Processing only 10 PDFs")
+        
+        st.markdown("---")
         st.markdown("### 🎯 Features")
         st.markdown("""
         - **Concurrent Processing**: Fast PDF and HCAD processing
@@ -169,7 +181,11 @@ def _show_address_extraction_step():
     
     if st.session_state.scraped_data is not None:
         # Simple progress display
-        st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
+        total_records = len(st.session_state.scraped_data)
+        if st.session_state.get('test_mode', False):
+            st.warning(f"🧪 Test Mode: Processing {min(10, total_records)} PDFs out of {total_records} total records")
+        else:
+            st.info(f"📊 Processing {total_records} records for address extraction")
         
         # Single progress bar with status
         progress_bar = st.progress(0)
