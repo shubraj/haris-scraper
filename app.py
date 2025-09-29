@@ -7,6 +7,8 @@ property addresses with AI-powered PDF processing and HCAD fallback.
 import streamlit as st
 import os
 import pandas as pd
+import threading
+import time
 from apps.instrument_scraper import run_app1
 from apps.unified_address_extractor import run_app2_unified
 from utils.logger_config import get_app_logger
@@ -16,6 +18,85 @@ logger = get_app_logger()
 
 # Install Playwright
 os.system("playwright install")
+
+# Global process management
+class ProcessManager:
+    """Manages running processes to prevent resource waste."""
+    
+    def __init__(self):
+        if 'process_manager' not in st.session_state:
+            st.session_state.process_manager = {
+                'running_processes': [],
+                'stop_requested': False,
+                'process_lock': threading.Lock()
+            }
+    
+    def add_process(self, process_name, process_func, *args, **kwargs):
+        """Add a new process to the manager."""
+        with st.session_state.process_manager['process_lock']:
+            if st.session_state.process_manager['stop_requested']:
+                logger.info(f"Process {process_name} not started - stop requested")
+                return None
+            
+            # Create and start thread
+            thread = threading.Thread(
+                target=self._run_process,
+                args=(process_name, process_func, args, kwargs),
+                daemon=True
+            )
+            thread.start()
+            
+            st.session_state.process_manager['running_processes'].append({
+                'name': process_name,
+                'thread': thread,
+                'start_time': time.time()
+            })
+            
+            logger.info(f"Started process: {process_name}")
+            return thread
+    
+    def _run_process(self, process_name, process_func, args, kwargs):
+        """Run a process with error handling."""
+        try:
+            process_func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Process {process_name} failed: {e}")
+        finally:
+            self._remove_process(process_name)
+    
+    def _remove_process(self, process_name):
+        """Remove a completed process."""
+        with st.session_state.process_manager['process_lock']:
+            st.session_state.process_manager['running_processes'] = [
+                p for p in st.session_state.process_manager['running_processes']
+                if p['name'] != process_name
+            ]
+            logger.info(f"Process {process_name} completed and removed")
+    
+    def stop_all_processes(self):
+        """Request all processes to stop."""
+        with st.session_state.process_manager['process_lock']:
+            st.session_state.process_manager['stop_requested'] = True
+            logger.info("Stop requested for all processes")
+    
+    def get_running_processes(self):
+        """Get list of currently running processes."""
+        with st.session_state.process_manager['process_lock']:
+            return st.session_state.process_manager['running_processes'].copy()
+    
+    def is_stop_requested(self):
+        """Check if stop has been requested."""
+        return st.session_state.process_manager['stop_requested']
+    
+    def reset(self):
+        """Reset the process manager."""
+        with st.session_state.process_manager['process_lock']:
+            st.session_state.process_manager['stop_requested'] = False
+            st.session_state.process_manager['running_processes'] = []
+            logger.info("Process manager reset")
+
+# Initialize process manager
+process_manager = ProcessManager()
 
 def main():
     """Main application entry point."""
@@ -95,6 +176,38 @@ def main():
         """)
         
         st.markdown("---")
+        st.markdown("### 🔧 Process Management")
+        
+        # Show running processes
+        running_processes = process_manager.get_running_processes()
+        if running_processes:
+            st.warning(f"⚠️ {len(running_processes)} process(es) running")
+            for process in running_processes:
+                runtime = int(time.time() - process['start_time'])
+                st.text(f"• {process['name']} ({runtime}s)")
+            
+            # Stop all processes button
+            if st.button("🛑 Stop All Processes", type="secondary"):
+                process_manager.stop_all_processes()
+                st.success("Stop requested for all processes")
+                st.rerun()
+        else:
+            st.success("✅ No processes running")
+        
+        # Reset button
+        if st.button("🔄 Reset All", type="secondary"):
+            process_manager.reset()
+            st.session_state.scraped_data = None
+            st.session_state.final_results = None
+            st.session_state.workflow_step = "scrape"
+            if 'live_results' in st.session_state:
+                del st.session_state.live_results
+            if 'live_results_df' in st.session_state:
+                del st.session_state.live_results_df
+            st.success("All processes and data reset")
+            st.rerun()
+        
+        st.markdown("---")
         st.markdown("### 🎯 Features")
         st.markdown("""
         - **Concurrent Processing**: Fast PDF and HCAD processing
@@ -102,35 +215,16 @@ def main():
         - **Smart Fallback**: HCAD search for missing addresses
         - **Progress Tracking**: Real-time progress bars
         - **Rate Limiting**: Optimized for API limits
+        - **Process Management**: Stop/reset running processes
         """)
     
-    # Initialize session state with persistence
+    # Initialize session state
     if "scraped_data" not in st.session_state:
         st.session_state.scraped_data = None
     if "final_results" not in st.session_state:
         st.session_state.final_results = None
     if "workflow_step" not in st.session_state:
         st.session_state.workflow_step = "scrape"
-    if "processing_started" not in st.session_state:
-        st.session_state.processing_started = False
-    if "processing_completed" not in st.session_state:
-        st.session_state.processing_completed = False
-    if "live_results" not in st.session_state:
-        st.session_state.live_results = []
-    if "live_results_df" not in st.session_state:
-        st.session_state.live_results_df = pd.DataFrame()
-    
-    # Debug information (remove in production)
-    with st.sidebar:
-        st.markdown("### 🔧 Debug Info")
-        st.write(f"Workflow Step: {st.session_state.workflow_step}")
-        st.write(f"Has Scraped Data: {st.session_state.scraped_data is not None}")
-        st.write(f"Processing Started: {st.session_state.processing_started}")
-        st.write(f"Processing Completed: {st.session_state.processing_completed}")
-        if st.session_state.scraped_data is not None:
-            st.write(f"Records Count: {len(st.session_state.scraped_data)}")
-        if st.session_state.live_results:
-            st.write(f"Live Results: {len(st.session_state.live_results)}")
     
     # Main workflow
     if st.session_state.workflow_step == "scrape":
@@ -147,29 +241,19 @@ def _show_scraping_step():
         st.markdown("Configure your search parameters and scrape instrument data from Harris County records.")
         st.markdown("---")
     
-    # Check if we already have scraped data (page refresh scenario)
-    if st.session_state.scraped_data is not None and not st.session_state.scraped_data.empty:
+    # Run the instrument scraper
+        df = run_app1()
+    
+    if df is not None and not df.empty:
+        st.session_state.scraped_data = df
+        
         st.markdown('<div class="success-container">', unsafe_allow_html=True)
-        st.success("✅ Scraping already completed! Found {} records. Moving to address extraction...".format(len(st.session_state.scraped_data)))
+        st.success("✅ Scraping completed! Found {} records. Starting address extraction...".format(len(df)))
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Auto-start address extraction
         st.session_state.workflow_step = "extract"
         st.rerun()
-    else:
-        # Run the instrument scraper only if we don't have data
-        df = run_app1()
-        
-        if df is not None and not df.empty:
-            st.session_state.scraped_data = df
-            
-            st.markdown('<div class="success-container">', unsafe_allow_html=True)
-            st.success("✅ Scraping completed! Found {} records. Starting address extraction...".format(len(df)))
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Auto-start address extraction
-            st.session_state.workflow_step = "extract"
-            st.rerun()
 
 def _show_address_extraction_step():
     """Show the address extraction step."""
@@ -180,105 +264,52 @@ def _show_address_extraction_step():
         st.markdown("---")
     
     if st.session_state.scraped_data is not None:
-        # Check if processing is already in progress
-        if st.session_state.processing_started and not st.session_state.processing_completed:
-            _show_processing_state()
-        else:
-            _start_address_extraction()
-    else:
-        st.warning("⚠️ No scraped data available. Please restart the process.")
-
-def _show_processing_state():
-    """Show the current processing state with live results."""
-    st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
-    
-    # Show current progress
-    if st.session_state.live_results:
-        progress_value = len(st.session_state.live_results) / len(st.session_state.scraped_data)
-        progress_bar = st.progress(min(progress_value, 1.0))
+        # Simple progress display
+        st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
         
-        # Show live results
-        live_df = pd.DataFrame(st.session_state.live_results)
+        # Single progress bar with status
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        # Metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Records Processed", len(live_df))
-        with col2:
-            addresses_found = len(live_df[live_df['Property Address'] != ''])
-            st.metric("Addresses Found", addresses_found)
-        with col3:
-            success_rate = (addresses_found / len(live_df)) * 100 if len(live_df) > 0 else 0
-            st.metric("Success Rate", f"{success_rate:.1f}%")
+        # Create placeholders for live results
+        live_results_placeholder = st.empty()
         
-        # Show accumulated results
-        st.markdown("#### 📋 Current Results (Live Updates)")
-        st.dataframe(live_df, width='stretch')
-        
-        # Check if processing is complete
-        if len(st.session_state.live_results) >= len(st.session_state.scraped_data):
-            st.session_state.processing_completed = True
-            st.session_state.final_results = live_df
-            st.session_state.workflow_step = "complete"
-            st.rerun()
-    else:
-        st.info("🔄 Processing is starting... Please wait for results to appear.")
-        
-        # Auto-refresh every 2 seconds to check for new results
-        import time
-        time.sleep(2)
-        st.rerun()
-
-def _start_address_extraction():
-    """Start the address extraction process."""
-    # Simple progress display
-    st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
-    
-    # Single progress bar with status
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    # Create placeholders for live results
-    live_results_placeholder = st.empty()
-    
-    # Mark processing as started
-    st.session_state.processing_started = True
-    
-    # Auto-start address extraction with progress tracking
-    try:
-        # Update status
-        status_text.text("🚀 Starting address extraction process...")
-        progress_bar.progress(0.1)
-        
-        # Create progress callback function
-        def update_progress(progress_value, message):
-            progress_bar.progress(progress_value)
-            status_text.text(message)
-        
-        # Run address extraction with progress callback
-        df = run_app2_unified(st.session_state.scraped_data, update_progress)
-        
-        if df is not None and not df.empty:
-            # Update progress to complete
-            progress_bar.progress(1.0)
-            status_text.text("✅ Address extraction completed!")
+        # Auto-start address extraction with progress tracking
+        try:
+            # Update status
+            status_text.text("🚀 Starting address extraction process...")
+            progress_bar.progress(0.1)
             
-            # Clear live results placeholder
-            live_results_placeholder.empty()
+            # Create progress callback function
+            def update_progress(progress_value, message):
+                progress_bar.progress(progress_value)
+                status_text.text(message)
             
-            st.session_state.final_results = df
-            st.session_state.processing_completed = True
-            st.session_state.workflow_step = "complete"
-            st.rerun()
-        else:
+            # Run address extraction with progress callback
+            df = run_app2_unified(st.session_state.scraped_data, update_progress)
+            
+            if df is not None and not df.empty:
+                # Update progress to complete
+                progress_bar.progress(1.0)
+                status_text.text("✅ Address extraction completed!")
+                
+                # Clear live results placeholder
+                live_results_placeholder.empty()
+                
+                st.session_state.final_results = df
+                st.session_state.workflow_step = "complete"
+                st.rerun()
+            else:
+                progress_bar.progress(0)
+                status_text.text("❌ Address extraction failed")
+                st.error("❌ Address extraction failed. No addresses found for any records.")
+        except Exception as e:
             progress_bar.progress(0)
             status_text.text("❌ Address extraction failed")
-            st.error("❌ Address extraction failed. No addresses found for any records.")
-    except Exception as e:
-        progress_bar.progress(0)
-        status_text.text("❌ Address extraction failed")
-        st.error(f"❌ Address extraction failed with error: {str(e)}")
-        logger.error(f"Address extraction error: {e}")
+            st.error(f"❌ Address extraction failed with error: {str(e)}")
+            logger.error(f"Address extraction error: {e}")
+    else:
+        st.warning("⚠️ No scraped data available. Please restart the process.")
 
 def _show_final_results():
     """Show the final results with download options."""
@@ -344,14 +375,10 @@ def _show_final_results():
         # Reset button
         st.markdown("---")
         if st.button("🔄 Start New Search", width='stretch'):
-            # Reset all session state
+            # Reset session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
-            st.session_state.processing_started = False
-            st.session_state.processing_completed = False
-            st.session_state.live_results = []
-            st.session_state.live_results_df = pd.DataFrame()
             st.rerun()
 
 

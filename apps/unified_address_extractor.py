@@ -31,7 +31,6 @@ class UnifiedAddressExtractorApp:
         self.address_extractor = AddressExtractor()
         self.pdf_ocr = PDFOCR()
         self.instrument_type_mapping = self._load_instrument_type_mapping()
-        self.cancelled = False
     
     def _load_instrument_type_mapping(self) -> Dict[str, str]:
         """Load instrument type mapping from JSON file (code -> name)."""
@@ -55,16 +54,6 @@ class UnifiedAddressExtractorApp:
         
         # Try to find the name for this code
         return self.instrument_type_mapping.get(doc_type, doc_type)
-    
-    def cancel(self):
-        """Cancel the current processing operation."""
-        self.cancelled = True
-        logger.info("Address extraction process cancelled")
-    
-    def _check_cancellation(self):
-        """Check if the process has been cancelled."""
-        if self.cancelled:
-            raise Exception("Process cancelled by user")
     
     def run(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """
@@ -114,79 +103,67 @@ class UnifiedAddressExtractorApp:
     
     def _process_records_concurrent(self, records_df: pd.DataFrame, progress_callback=None) -> List[Dict]:
         """Process records with optimized PDF + HCAD batching."""
-        try:
-            self._check_cancellation()
+        records_list = records_df.to_dict('records')
+        final_results = []
+        hcad_records = []
+        
+        # Initialize session state for live results display
+        if 'live_results' not in st.session_state:
+            st.session_state.live_results = []
+        if 'live_results_df' not in st.session_state:
+            st.session_state.live_results_df = pd.DataFrame()
+        
+        # Create live results display
+        results_placeholder = st.empty()
+        status_placeholder = st.empty()
+        
+        # Step 1: Process PDFs concurrently (5 at a time)
+        pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
+        if pdf_records:
+            if progress_callback:
+                progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
+            pdf_results = self._process_pdfs_concurrent_with_live_updates(records_list, results_placeholder, status_placeholder)
             
-            records_list = records_df.to_dict('records')
-            final_results = []
-            hcad_records = []
-            
-            # Initialize session state for live results display
-            if 'live_results' not in st.session_state:
-                st.session_state.live_results = []
-            if 'live_results_df' not in st.session_state:
-                st.session_state.live_results_df = pd.DataFrame()
-            
-            # Create live results display
-            results_placeholder = st.empty()
-            status_placeholder = st.empty()
-            
-            # Step 1: Process PDFs concurrently (5 at a time)
-            pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
-            if pdf_records:
-                if progress_callback:
-                    progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
-                pdf_results = self._process_pdfs_concurrent_with_live_updates(records_list, results_placeholder, status_placeholder)
-                
-                # Add successful PDF results
-                for result in pdf_results:
-                    if result:
-                        final_results.append(result)
-                        st.session_state.live_results.append(result)
-                
-                if progress_callback:
-                    progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
-            else:
-                if progress_callback:
-                    progress_callback(0.1, "📄 No PDFs found, skipping PDF processing...")
-                pdf_results = []
-            
-            self._check_cancellation()
-            
-            # Step 2: Collect records that need HCAD (no PDF or no address found)
-            for record in records_list:
-                record_id = record.get('FileNo', 'unknown')
-                # Check if this record was processed by PDF and found an address
-                pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
-                if not pdf_result or not pdf_result.get('Property Address', '').strip():
-                    hcad_records.append(record)
-            
-            # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
-            if hcad_records:
-                if progress_callback:
-                    progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
-                hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
-                
-                # Add successful HCAD results
-                for result in hcad_results:
-                    if result:
-                        final_results.append(result)
-                        st.session_state.live_results.append(result)
-            else:
-                if progress_callback:
-                    progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
+            # Add successful PDF results
+            for result in pdf_results:
+                if result:
+                    final_results.append(result)
+                    st.session_state.live_results.append(result)
             
             if progress_callback:
-                progress_callback(1.0, "✅ Address extraction completed!")
+                progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
+        else:
+            if progress_callback:
+                progress_callback(0.1, "📄 No PDFs found, skipping PDF processing...")
+            pdf_results = []
+        
+        # Step 2: Collect records that need HCAD (no PDF or no address found)
+        for record in records_list:
+            record_id = record.get('FileNo', 'unknown')
+            # Check if this record was processed by PDF and found an address
+            pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
+            if not pdf_result or not pdf_result.get('Property Address', '').strip():
+                hcad_records.append(record)
+        
+        # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
+        if hcad_records:
+            if progress_callback:
+                progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
+            hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
             
-            return final_results
-            
-        except Exception as e:
-            if "cancelled" in str(e).lower():
-                logger.info("Address extraction cancelled by user")
-                return []
-            else:
-                raise e
+            # Add successful HCAD results
+            for result in hcad_results:
+                if result:
+                    final_results.append(result)
+                    st.session_state.live_results.append(result)
+        else:
+            if progress_callback:
+                progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
+        
+        if progress_callback:
+            progress_callback(1.0, "✅ Address extraction completed!")
+        
+        return final_results
     
     def _process_pdfs_concurrent(self, records_list: List[Dict]) -> List[Optional[Dict]]:
         """Process PDFs concurrently with 5 at a time using ThreadPoolExecutor."""
@@ -248,8 +225,11 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(pdf_records), batch_size):
-            # Check for cancellation before each batch
-            self._check_cancellation()
+            # Check if stop has been requested
+            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
+                logger.info("PDF processing stopped by user request")
+                status_placeholder.warning("🛑 PDF processing stopped by user request")
+                break
             
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
@@ -267,8 +247,10 @@ class UnifiedAddressExtractorApp:
                 # Collect results as they complete
                 batch_results = []
                 for future in as_completed(future_to_record):
-                    # Check for cancellation during processing
-                    self._check_cancellation()
+                    # Check stop request again
+                    if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
+                        logger.info("PDF processing stopped during batch execution")
+                        break
                     
                     record = future_to_record[future]
                     try:
@@ -326,6 +308,13 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(hcad_records), batch_size):
+            # Check if stop has been requested
+            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
+                logger.info("HCAD processing stopped by user request")
+                if status_placeholder:
+                    status_placeholder.warning("🛑 HCAD processing stopped by user request")
+                break
+            
             batch = hcad_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             processed_count = min(i + batch_size, len(hcad_records))
@@ -348,6 +337,11 @@ class UnifiedAddressExtractorApp:
             
             # Run HCAD search for this batch
             await run_hcad_searches(hcad_df)
+            
+            # Check stop request again after HCAD search
+            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
+                logger.info("HCAD processing stopped after search completion")
+                break
             
             # Get results and update live display
             if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
