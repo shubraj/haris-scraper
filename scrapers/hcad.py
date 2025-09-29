@@ -326,6 +326,7 @@ class HCADScraper:
                 logger.warning(f"Missing DocType in HCAD record: {row.keys()}")
             
             standardized_result = {
+                'FileNo': row.get('FileNo', ''),
                 'Grantor': row.get('Grantors', ''),
                 'Grantee': row.get('Grantees', ''),
                 'Instrument Type': instrument_type_name,
