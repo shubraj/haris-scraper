@@ -228,8 +228,8 @@ class UnifiedAddressExtractorApp:
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
-            # Update status
-            status_placeholder.info(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} PDFs)")
+            # Update status with batch progress
+            status_placeholder.info(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} PDFs) - Total processed so far: {len(st.session_state.live_results)}")
             
             # Process batch concurrently
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -249,7 +249,7 @@ class UnifiedAddressExtractorApp:
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
                             
-                            # Update live results display
+                            # Add to live results and update display
                             st.session_state.live_results.append(result)
                             self._update_live_results_display(results_placeholder)
                         else:
@@ -282,10 +282,15 @@ class UnifiedAddressExtractorApp:
                     success_rate = (addresses_found / len(live_df)) * 100 if len(live_df) > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
                 
-                # Show recent results (last 10)
-                st.markdown("#### 🔄 Recent Extractions")
-                recent_df = live_df.tail(10)
-                st.dataframe(recent_df, width='stretch')
+                # Show ALL results accumulated so far (not just recent 10)
+                st.markdown("#### 📋 All Extracted Results (Accumulated)")
+                st.dataframe(live_df, width='stretch')
+                
+                # Show recent additions (last 5) for quick reference
+                if len(live_df) > 5:
+                    st.markdown("#### 🔄 Latest Additions")
+                    recent_df = live_df.tail(5)
+                    st.dataframe(recent_df, width='stretch')
     
     async def _process_hcad_batch_with_live_updates(self, hcad_records: List[Dict], progress_callback=None, results_placeholder=None, status_placeholder=None) -> List[Optional[Dict]]:
         """Process HCAD records in batches with live updates."""
@@ -302,9 +307,9 @@ class UnifiedAddressExtractorApp:
             batch_num = i // batch_size + 1
             processed_count = min(i + batch_size, len(hcad_records))
             
-            # Update status
+            # Update status with accumulated results count
             if status_placeholder:
-                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches)")
+                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Total results so far: {len(st.session_state.live_results)}")
             
             # Update progress
             if progress_callback:
@@ -326,11 +331,11 @@ class UnifiedAddressExtractorApp:
                 batch_results = st.session_state.hcad_results.to_dict('records')
                 all_results.extend(batch_results)
                 
-                # Add to live results
+                # Add to live results and update display immediately
                 for result in batch_results:
                     st.session_state.live_results.append(result)
                 
-                # Update live display
+                # Update live display with all accumulated results
                 if results_placeholder:
                     self._update_live_results_display(results_placeholder)
                 
