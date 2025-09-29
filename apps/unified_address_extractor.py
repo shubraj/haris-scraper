@@ -12,9 +12,6 @@ import tempfile
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import re
 
 from scrapers.harris_county_scraper import get_scraper
 from scrapers.hcad import run_hcad_searches
@@ -57,58 +54,6 @@ class UnifiedAddressExtractorApp:
         
         # Try to find the name for this code
         return self.instrument_type_mapping.get(doc_type, doc_type)
-    
-    def _calculate_name_similarity(self, name1: str, name2: str) -> float:
-        """Calculate cosine similarity between two names."""
-        if not name1 or not name2:
-            return 0.0
-        
-        # Clean and normalize names
-        def clean_name(name):
-            # Remove common legal suffixes and clean up
-            name = re.sub(r'\b(LLC|INC|CORP|LTD|LP|LLP|CO|COMPANY)\b', '', name, flags=re.IGNORECASE)
-            name = re.sub(r'[^\w\s]', ' ', name)  # Remove punctuation
-            name = ' '.join(name.split())  # Normalize whitespace
-            return name.strip().lower()
-        
-        clean_name1 = clean_name(name1)
-        clean_name2 = clean_name(name2)
-        
-        if not clean_name1 or not clean_name2:
-            return 0.0
-        
-        # Use TF-IDF vectorizer for similarity
-        try:
-            vectorizer = TfidfVectorizer()
-            tfidf_matrix = vectorizer.fit_transform([clean_name1, clean_name2])
-            similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-            return similarity
-        except Exception as e:
-            logger.warning(f"Error calculating name similarity: {e}")
-            return 0.0
-    
-    def _should_use_pdf_grantee(self, pdf_grantee: str, original_grantee: str, grantor: str) -> bool:
-        """Check if PDF grantee name should be used based on similarity to grantor."""
-        if not pdf_grantee or not grantor:
-            return True  # Use PDF grantee if no grantor to compare against
-        
-        # Calculate similarity between PDF grantee and grantor
-        similarity = self._calculate_name_similarity(pdf_grantee, grantor)
-        
-        # If similarity is high (>0.7), it's likely an error - use original grantee
-        if similarity > 0.7:
-            logger.info(f"PDF grantee '{pdf_grantee}' too similar to grantor '{grantor}' (similarity: {similarity:.2f}) - using original grantee")
-            return False
-        
-        # If PDF grantee is similar to original grantee, use PDF grantee
-        if original_grantee and original_grantee.strip() != 'SEE INSTRUMENT':
-            original_similarity = self._calculate_name_similarity(pdf_grantee, original_grantee)
-            if original_similarity > 0.8:
-                logger.info(f"PDF grantee '{pdf_grantee}' similar to original grantee '{original_grantee}' (similarity: {original_similarity:.2f}) - using PDF grantee")
-                return True
-        
-        # Default to using PDF grantee if not too similar to grantor
-        return True
     
     def run(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
         """
@@ -240,12 +185,7 @@ class UnifiedAddressExtractorApp:
                 pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
                 if not pdf_result or not pdf_result.get('Property Address', '').strip():
                     # PDF processing didn't find address - needs HCAD
-                    # Use updated grantee name from PDF processing if available
-                    updated_record = record.copy()
-                    if pdf_result and pdf_result.get('Grantee') and pdf_result.get('Grantee') != record.get('Grantees', ''):
-                        updated_record['Grantees'] = pdf_result.get('Grantee')
-                        logger.info(f"🔄 {record_id}: Using updated grantee name '{pdf_result.get('Grantee')}' for HCAD search")
-                    hcad_records.append(updated_record)
+                    hcad_records.append(record)
                     logger.debug(f"Record {record_id}: PDF processing failed/no address - adding to HCAD")
                 else:
                     logger.debug(f"Record {record_id}: PDF processing found address - skipping HCAD")
@@ -298,23 +238,8 @@ class UnifiedAddressExtractorApp:
                 for future in as_completed(future_to_record):
                     record = future_to_record[future]
                     try:
-                        pdf_result = future.result()
-                        if pdf_result:
-                            pdf_address = pdf_result.get('address', '') if isinstance(pdf_result, dict) else pdf_result
-                            pdf_grantee_name = pdf_result.get('grantee_name', '') if isinstance(pdf_result, dict) else ''
-                            
-                            # Use PDF grantee name if original grantee is "SEE INSTRUMENT" and it's not too similar to grantor
-                            if record.get('Grantees', '').strip().lower() == 'see instrument' and pdf_grantee_name:
-                                original_grantee = record.get('Grantees', '')
-                                grantor = record.get('Grantors', '')
-                                
-                                if self._should_use_pdf_grantee(pdf_grantee_name, original_grantee, grantor):
-                                    record = record.copy()  # Don't modify original
-                                    record['Grantees'] = pdf_grantee_name
-                                    logger.info(f"🔄 {record.get('FileNo', 'unknown')}: Updated grantee from 'SEE INSTRUMENT' to '{pdf_grantee_name}'")
-                                else:
-                                    logger.info(f"⚠️ {record.get('FileNo', 'unknown')}: PDF grantee '{pdf_grantee_name}' too similar to grantor '{grantor}' - keeping original grantee")
-                            
+                        pdf_address = future.result()
+                        if pdf_address:
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
@@ -368,25 +293,10 @@ class UnifiedAddressExtractorApp:
                 for future in as_completed(future_to_record):
                     record = future_to_record[future]
                     try:
-                        pdf_result = future.result()
+                        pdf_address = future.result()
                         st.session_state.pdf_processed += 1  # Track PDF processed
                         
-                        if pdf_result:
-                            pdf_address = pdf_result.get('address', '') if isinstance(pdf_result, dict) else pdf_result
-                            pdf_grantee_name = pdf_result.get('grantee_name', '') if isinstance(pdf_result, dict) else ''
-                            
-                            # Use PDF grantee name if original grantee is "SEE INSTRUMENT" and it's not too similar to grantor
-                            if record.get('Grantees', '').strip() == 'SEE INSTRUMENT' and pdf_grantee_name:
-                                original_grantee = record.get('Grantees', '')
-                                grantor = record.get('Grantors', '')
-                                
-                                if self._should_use_pdf_grantee(pdf_grantee_name, original_grantee, grantor):
-                                    record = record.copy()  # Don't modify original
-                                    record['Grantees'] = pdf_grantee_name
-                                    logger.info(f"🔄 {record.get('FileNo', 'unknown')}: Updated grantee from 'SEE INSTRUMENT' to '{pdf_grantee_name}'")
-                                else:
-                                    logger.info(f"⚠️ {record.get('FileNo', 'unknown')}: PDF grantee '{pdf_grantee_name}' too similar to grantor '{grantor}' - keeping original grantee")
-                            
+                        if pdf_address:
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
@@ -398,8 +308,6 @@ class UnifiedAddressExtractorApp:
                                 # Update live display immediately
                                 if results_placeholder:
                                     self._update_live_results_display(results_placeholder)
-                                    # Small delay to make updates visible
-                                    time.sleep(0.1)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -557,8 +465,8 @@ class UnifiedAddressExtractorApp:
         return all_results
     
     
-    def _try_pdf_extraction(self, record: Dict) -> Optional[Dict]:
-        """Try to extract address and grantee name from PDF for a single record with optimized rate limit handling."""
+    def _try_pdf_extraction(self, record: Dict) -> Optional[str]:
+        """Try to extract address from PDF for a single record with optimized rate limit handling."""
         max_retries = 2  # Reduced retries for faster processing
         retry_delay = 3  # Reduced delay for faster recovery
         
@@ -579,13 +487,7 @@ class UnifiedAddressExtractorApp:
                 if pdf_text.strip():
                     addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
                     if addresses:
-                        address = self.address_extractor.standardize_address(addresses[0])
-                        # Extract grantee name if available
-                        grantee_name = addresses[0].get('grantee_name', '') if isinstance(addresses[0], dict) else ''
-                        return {
-                            'address': address,
-                            'grantee_name': grantee_name
-                        }
+                        return self.address_extractor.standardize_address(addresses[0])
                 
                 return None
                 
