@@ -38,9 +38,28 @@ class UnifiedAddressExtractorApp:
             with open('instrument_types.json', 'r') as f:
                 name_to_code = json.load(f)
             
-            # Create reverse mapping (code -> name)
-            code_to_name = {code: name for name, code in name_to_code.items()}
-            logger.info(f"Loaded {len(code_to_name)} instrument type mappings")
+            # Create reverse mapping (code -> name) with duplicate handling
+            code_to_name = {}
+            code_counts = {}
+            
+            for name, code in name_to_code.items():
+                if code in code_counts:
+                    # Duplicate code found, create unique key
+                    code_counts[code] += 1
+                    unique_code = f"{code}#{code_counts[code]}"
+                    code_to_name[unique_code] = name
+                    logger.debug(f"Duplicate code '{code}' -> '{unique_code}': {name}")
+                else:
+                    # First occurrence of this code
+                    code_counts[code] = 1
+                    code_to_name[code] = name
+            
+            # Log duplicate codes for debugging
+            duplicates = {code: count for code, count in code_counts.items() if count > 1}
+            if duplicates:
+                logger.info(f"Found {len(duplicates)} codes with duplicates: {duplicates}")
+            
+            logger.info(f"Loaded {len(code_to_name)} instrument type mappings ({len(code_counts)} unique codes)")
             return code_to_name
             
         except Exception as e:
@@ -48,11 +67,21 @@ class UnifiedAddressExtractorApp:
             return {}
     
     def _get_instrument_type_name(self, doc_type: str) -> str:
-        """Get instrument type code (keep original code, don't convert to name)."""
+        """Get human-readable instrument type name from code."""
         if not doc_type:
             return ''
         
-        # Return the original code directly
+        # First try exact match
+        if doc_type in self.instrument_type_mapping:
+            return self.instrument_type_mapping[doc_type]
+        
+        # If not found, try to find by base code (remove #1, #2, etc.)
+        base_code = doc_type.split('#')[0]
+        for key, value in self.instrument_type_mapping.items():
+            if key.startswith(base_code + '#'):
+                return value
+        
+        # If still not found, return the original code
         return doc_type
     
     def run(self, records_df: pd.DataFrame, progress_callback=None) -> Optional[pd.DataFrame]:
