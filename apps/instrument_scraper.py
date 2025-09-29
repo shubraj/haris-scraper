@@ -14,29 +14,38 @@ from utils.logger_config import get_app_logger
 # Configure logging
 logger = get_app_logger()
 
+# Global app instance for efficiency
+_app_instance = None
+
 
 class InstrumentScraperApp:
     """Streamlit application for scraping Harris County instrument data."""
     
     def __init__(self):
         self.instrument_types = self._load_instrument_types()
+        self.scraper = None  # Initialize scraper lazily
     
     def _load_instrument_types(self) -> Dict[str, str]:
         """Load instrument types from JSON file."""
         try:
-            logger.info(f"Loading instrument type definitions from {INSTRUMENT_TYPES_FILE}")
             with open(INSTRUMENT_TYPES_FILE, "r", encoding="utf-8") as f:
                 types = json.load(f)
-            logger.info(f"Successfully loaded {len(types)} instrument type definitions from configuration file")
+            logger.info(f"Loaded {len(types)} instrument type definitions")
             return types
         except FileNotFoundError:
-            logger.error(f"Configuration file not found: {INSTRUMENT_TYPES_FILE} - application cannot function without instrument types")
+            logger.error(f"Configuration file not found: {INSTRUMENT_TYPES_FILE}")
             st.error(f"Instrument types file not found: {INSTRUMENT_TYPES_FILE}")
             return {}
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON format in instrument types file: {e} - file may be corrupted")
+            logger.error(f"Invalid JSON format in instrument types file: {e}")
             st.error(f"Error parsing instrument types file: {e}")
             return {}
+    
+    def _get_scraper(self):
+        """Get scraper instance lazily to avoid repeated initialization."""
+        if self.scraper is None:
+            self.scraper = get_scraper()
+        return self.scraper
     
     def run(self) -> Optional[pd.DataFrame]:
         """
@@ -94,21 +103,17 @@ class InstrumentScraperApp:
                 progress_bar = st.progress(0)
                 total_codes = len(code_to_keys)
                 
-                # Get scraper instance once to avoid repeated initialization
-                scraper = get_scraper()
-                
                 for i, (code, keys) in enumerate(code_to_keys.items()):
-                    logger.info(f"Processing instrument code '{code}' for types: {keys} ({i+1}/{total_codes})")
                     st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
                     
-                    df = scraper.scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
+                    df = self._get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         df["Instrument Type"] = ", ".join(keys)
                         all_results.append(df)
-                        logger.info(f"Successfully scraped {len(df)} records for code '{code}' - added to results")
+                        logger.info(f"Scraped {len(df)} records for {', '.join(keys)}")
                         st.success(f"Found {len(df)} records")
                     else:
-                        logger.warning(f"No records found for instrument code '{code}' in date range {start_date} to {end_date}")
+                        logger.info(f"No records found for {', '.join(keys)}")
                         st.info("No data found for this instrument type")
                     
                     progress_bar.progress((i + 1) / total_codes)
@@ -146,5 +151,7 @@ def run_app1() -> Optional[pd.DataFrame]:
     Returns:
         DataFrame with scraped data or None
     """
-    app = InstrumentScraperApp()
-    return app.run()
+    global _app_instance
+    if _app_instance is None:
+        _app_instance = InstrumentScraperApp()
+    return _app_instance.run()
