@@ -225,12 +225,6 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(pdf_records), batch_size):
-            # Check if stop has been requested
-            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
-                logger.info("PDF processing stopped by user request")
-                status_placeholder.warning("🛑 PDF processing stopped by user request")
-                break
-            
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
@@ -247,11 +241,6 @@ class UnifiedAddressExtractorApp:
                 # Collect results as they complete
                 batch_results = []
                 for future in as_completed(future_to_record):
-                    # Check stop request again
-                    if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
-                        logger.info("PDF processing stopped during batch execution")
-                        break
-                    
                     record = future_to_record[future]
                     try:
                         pdf_address = future.result()
@@ -308,13 +297,6 @@ class UnifiedAddressExtractorApp:
         all_results = []
         
         for i in range(0, len(hcad_records), batch_size):
-            # Check if stop has been requested
-            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
-                logger.info("HCAD processing stopped by user request")
-                if status_placeholder:
-                    status_placeholder.warning("🛑 HCAD processing stopped by user request")
-                break
-            
             batch = hcad_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             processed_count = min(i + batch_size, len(hcad_records))
@@ -337,11 +319,6 @@ class UnifiedAddressExtractorApp:
             
             # Run HCAD search for this batch
             await run_hcad_searches(hcad_df)
-            
-            # Check stop request again after HCAD search
-            if 'process_manager' in st.session_state and st.session_state.process_manager.get('stop_requested', False):
-                logger.info("HCAD processing stopped after search completion")
-                break
             
             # Get results and update live display
             if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:

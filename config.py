@@ -53,7 +53,6 @@ BROWSER_HEADERS = {
 
 # File Paths
 INSTRUMENT_TYPES_FILE = Path(__file__).parent / "instrument_types.json"
-OUTPUT_EXCEL_FILE = Path(__file__).parent / "output.xlsx"
 
 # Timeout Settings
 REQUEST_TIMEOUT = 30
