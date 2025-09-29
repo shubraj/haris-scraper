@@ -272,9 +272,11 @@ class UnifiedAddressExtractorApp:
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
                             
-                            # Add to live results and update display
-                            st.session_state.live_results.append(result)
-                            self._update_live_results_display(results_placeholder)
+                            # Add to live results and update display (check for duplicates)
+                            existing_file_nos = [r.get('FileNo') for r in st.session_state.live_results if r.get('FileNo')]
+                            if result.get('FileNo') not in existing_file_nos:
+                                st.session_state.live_results.append(result)
+                                self._update_live_results_display(results_placeholder)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -291,6 +293,12 @@ class UnifiedAddressExtractorApp:
         """Update the live results display with current results."""
         if st.session_state.live_results:
             live_df = pd.DataFrame(st.session_state.live_results)
+            
+            # Remove duplicates based on FileNo to prevent double counting
+            if 'FileNo' in live_df.columns:
+                live_df = live_df.drop_duplicates(subset=['FileNo'], keep='last')
+                st.session_state.live_results = live_df.to_dict('records')
+            
             st.session_state.live_results_df = live_df
             
             # Calculate total processed (PDF + HCAD)
@@ -355,9 +363,11 @@ class UnifiedAddressExtractorApp:
                 batch_results = st.session_state.hcad_results.to_dict('records')
                 all_results.extend(batch_results)
                 
-                # Add to live results and update display immediately
+                # Add to live results and update display immediately (check for duplicates)
+                existing_file_nos = [r.get('FileNo') for r in st.session_state.live_results if r.get('FileNo')]
                 for result in batch_results:
-                    st.session_state.live_results.append(result)
+                    if result.get('FileNo') not in existing_file_nos:
+                        st.session_state.live_results.append(result)
                 
                 # Update live display with all accumulated results
                 if results_placeholder:
