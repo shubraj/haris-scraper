@@ -1,11 +1,8 @@
-# System packages for Streamlit Cloud deployment
 wget
 curl
 unzip
 ca-certificates
 fonts-liberation
-
-# Playwright browser dependencies
 libnss3
 libnspr4
 libatk1.0-0
@@ -24,13 +21,9 @@ libpangocairo-1.0-0
 libpango-1.0-0
 libxss1
 libxshmfence1
-
-# Tesseract OCR dependencies
 tesseract-ocr
 tesseract-ocr-eng
 libtesseract-dev
-
-# Additional system libraries
 libglib2.0-0
 libgthread-2.0-0
 libgconf-2-4
