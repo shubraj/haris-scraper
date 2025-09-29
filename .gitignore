@@ -129,3 +129,5 @@ site/
 .python-version
 Pipfile.lock
 poetry.lock
+
+downloads/

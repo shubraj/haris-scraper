@@ -51,14 +51,12 @@ class AddressExtractor:
                     {"role": "system", "content": self._get_system_prompt()},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,  # Low temperature for consistent results
-                max_tokens=2000
             )
             
             result = response.choices[0].message.content
             addresses = self._parse_response(result)
             
-            logger.info(f"Address extraction completed successfully - found {len(addresses)} addresses using OpenAI GPT-4o-mini")
+            logger.info(f"Address extraction completed successfully - found {len(addresses)} addresses using OpenAI")
             return addresses
             
         except Exception as e:

@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # API Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

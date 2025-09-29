@@ -40,10 +40,7 @@ class HarrisCountyScraper:
         # Initialize login and security params
         self.login()
         self.security_params = self._get_security_params()
-        # Only log initialization once per session
-        if not hasattr(self, '_init_logged'):
-            logger.info("Harris County scraper initialized successfully with session-based HTTP client")
-            self._init_logged = True
+        logger.info("Harris County scraper initialized successfully with session-based HTTP client")
     
     def _get_search_url(self) -> str:
         """Get the search URL for Harris County records."""
@@ -95,10 +92,7 @@ class HarrisCountyScraper:
             data=data
         )
         if response.url.endswith("/Applications/WebSearch/Home.aspx"):
-            # Only log authentication success once per session
-            if not hasattr(self, '_login_logged'):
-                logger.info("Successfully authenticated with Harris County Clerk's website")
-                self._login_logged = True
+            logger.info("Successfully authenticated with Harris County Clerk's website")
         else:
             logger.error(f"Authentication failed - unexpected redirect to: {response.url}")
             raise Exception("Login failed - invalid credentials or network issue")
