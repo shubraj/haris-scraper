@@ -2,6 +2,8 @@
 Unified Address Extraction Application - Step 2
 Extract addresses from PDFs using AI, fallback to HCAD search if needed.
 """
+import time
+import json
 import streamlit as st
 import pandas as pd
 import asyncio
@@ -28,6 +30,30 @@ class UnifiedAddressExtractorApp:
         self.scraper = get_scraper()
         self.address_extractor = AddressExtractor()
         self.pdf_ocr = PDFOCR()
+        self.instrument_type_mapping = self._load_instrument_type_mapping()
+    
+    def _load_instrument_type_mapping(self) -> Dict[str, str]:
+        """Load instrument type mapping from JSON file (code -> name)."""
+        try:
+            with open('instrument_types.json', 'r') as f:
+                name_to_code = json.load(f)
+            
+            # Create reverse mapping (code -> name)
+            code_to_name = {code: name for name, code in name_to_code.items()}
+            logger.info(f"Loaded {len(code_to_name)} instrument type mappings")
+            return code_to_name
+            
+        except Exception as e:
+            logger.error(f"Failed to load instrument types: {e}")
+            return {}
+    
+    def _get_instrument_type_name(self, doc_type: str) -> str:
+        """Get human-readable instrument type name from code."""
+        if not doc_type:
+            return ''
+        
+        # Try to find the name for this code
+        return self.instrument_type_mapping.get(doc_type, doc_type)
     
     def run(self, records_df: pd.DataFrame) -> Optional[pd.DataFrame]:
         """
@@ -174,11 +200,6 @@ class UnifiedAddressExtractorApp:
             
             # Update progress bar
             progress_bar.progress(batch_num / total_batches)
-            
-            # Small delay between batches to avoid OpenAI rate limits
-            if batch_num < total_batches:
-                import time
-                time.sleep(2)  # 2 second delay between batches
         
         # Clear status text
         status_text.text("✅ PDF processing completed!")
@@ -251,7 +272,6 @@ class UnifiedAddressExtractorApp:
                 if 'rate limit' in error_msg or 'too many requests' in error_msg:
                     if attempt < max_retries - 1:
                         logger.warning(f"OpenAI rate limit hit for record {record.get('FileNo', 'unknown')} (attempt {attempt + 1}/{max_retries}): {e}")
-                        import time
                         time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
                         continue
                     else:
@@ -378,11 +398,14 @@ class UnifiedAddressExtractorApp:
     
     def _create_result_record(self, original_record: Dict, property_address: str, source: str) -> Dict:
         """Create a result record with extracted address."""
+        doc_type_code = original_record.get('DocType', '')
+        instrument_type_name = self._get_instrument_type_name(doc_type_code)
+        
         return {
             'FileNo': original_record.get('FileNo', ''),
             'Grantor': original_record.get('Grantors', ''),
             'Grantee': original_record.get('Grantees', ''),
-            'Instrument Type': original_record.get('DocType', ''),
+            'Instrument Type': instrument_type_name,
             'Recording Date': original_record.get('FileDate', ''),
             'Film Code (Ref)': original_record.get('FilmCode', ''),
             'Legal Description': original_record.get('LegalDescription', ''),
