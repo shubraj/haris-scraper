@@ -117,12 +117,21 @@ class UnifiedAddressExtractorApp:
         results_placeholder = st.empty()
         status_placeholder = st.empty()
         
+        # Check for stop signal before starting
+        if st.session_state.get('stop_processing', False):
+            return final_results
+        
         # Step 1: Process PDFs concurrently (5 at a time)
         pdf_records = [r for r in records_list if r.get('PdfUrl') and r.get('PdfUrl').strip()]
         if pdf_records:
             if progress_callback:
-                progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs...")
+                if not progress_callback(0.1, f"📄 Processing {len(pdf_records)} PDFs..."):
+                    return final_results
             pdf_results = self._process_pdfs_concurrent_with_live_updates(records_list, results_placeholder, status_placeholder)
+            
+            # Check for stop signal after PDF processing
+            if st.session_state.get('stop_processing', False):
+                return final_results
             
             # Add successful PDF results
             for result in pdf_results:
@@ -131,10 +140,12 @@ class UnifiedAddressExtractorApp:
                     st.session_state.live_results.append(result)
             
             if progress_callback:
-                progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses...")
+                if not progress_callback(0.5, "📄 PDF processing completed, checking for missing addresses..."):
+                    return final_results
         else:
             if progress_callback:
-                progress_callback(0.1, "📄 No PDFs found, skipping PDF processing...")
+                if not progress_callback(0.1, "📄 No PDFs found, skipping PDF processing..."):
+                    return final_results
             pdf_results = []
         
         # Step 2: Collect records that need HCAD (no PDF or no address found)
@@ -148,7 +159,8 @@ class UnifiedAddressExtractorApp:
         # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
         if hcad_records:
             if progress_callback:
-                progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records...")
+                if not progress_callback(0.6, f"🔍 Searching HCAD for {len(hcad_records)} records..."):
+                    return final_results
             hcad_results = asyncio.run(self._process_hcad_batch_with_live_updates(hcad_records, progress_callback, results_placeholder, status_placeholder))
             
             # Add successful HCAD results
@@ -158,7 +170,8 @@ class UnifiedAddressExtractorApp:
                     st.session_state.live_results.append(result)
         else:
             if progress_callback:
-                progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs")
+                if not progress_callback(0.6, "🔍 No HCAD search needed - all addresses found in PDFs"):
+                    return final_results
         
         if progress_callback:
             progress_callback(1.0, "✅ Address extraction completed!")

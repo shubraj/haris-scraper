@@ -111,6 +111,14 @@ def main():
         st.session_state.final_results = None
     if "workflow_step" not in st.session_state:
         st.session_state.workflow_step = "scrape"
+    if "processing_started" not in st.session_state:
+        st.session_state.processing_started = False
+    if "processing_completed" not in st.session_state:
+        st.session_state.processing_completed = False
+    if "processing_error" not in st.session_state:
+        st.session_state.processing_error = None
+    if "stop_processing" not in st.session_state:
+        st.session_state.stop_processing = False
     
     # Main workflow
     if st.session_state.workflow_step == "scrape":
@@ -150,8 +158,35 @@ def _show_address_extraction_step():
         st.markdown("---")
     
     if st.session_state.scraped_data is not None:
+        # Check if processing was already completed
+        if st.session_state.processing_completed:
+            st.success("✅ Address extraction completed! Moving to results...")
+            st.session_state.workflow_step = "complete"
+            st.rerun()
+            return
+        
+        # Check if there was an error
+        if st.session_state.processing_error:
+            st.error(f"❌ Processing failed with error: {st.session_state.processing_error}")
+            if st.button("🔄 Retry Processing"):
+                st.session_state.processing_error = None
+                st.session_state.processing_started = False
+                st.rerun()
+            return
+        
+        # Show stop button if processing is active
+        if st.session_state.processing_started and not st.session_state.stop_processing:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
+            with col2:
+                if st.button("⏹️ Stop Processing", type="secondary"):
+                    st.session_state.stop_processing = True
+                    st.rerun()
+        
         # Simple progress display
-        st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
+        if not st.session_state.processing_started:
+            st.info(f"📊 Ready to process {len(st.session_state.scraped_data)} records for address extraction")
         
         # Single progress bar with status
         progress_bar = st.progress(0)
@@ -160,40 +195,66 @@ def _show_address_extraction_step():
         # Create placeholders for live results
         live_results_placeholder = st.empty()
         
-        # Auto-start address extraction with progress tracking
-        try:
-            # Update status
-            status_text.text("🚀 Starting address extraction process...")
-            progress_bar.progress(0.1)
+        # Start or continue processing
+        if not st.session_state.processing_started and not st.session_state.stop_processing:
+            # Start processing
+            st.session_state.processing_started = True
+            st.session_state.stop_processing = False
+            st.session_state.processing_error = None
             
-            # Create progress callback function
-            def update_progress(progress_value, message):
-                progress_bar.progress(progress_value)
-                status_text.text(message)
-            
-            # Run address extraction with progress callback
-            df = run_app2_unified(st.session_state.scraped_data, update_progress)
-            
-            if df is not None and not df.empty:
-                # Update progress to complete
-                progress_bar.progress(1.0)
-                status_text.text("✅ Address extraction completed!")
+            # Auto-start address extraction with progress tracking
+            try:
+                # Update status
+                status_text.text("🚀 Starting address extraction process...")
+                progress_bar.progress(0.1)
                 
-                # Clear live results placeholder
-                live_results_placeholder.empty()
+                # Create progress callback function
+                def update_progress(progress_value, message):
+                    if st.session_state.stop_processing:
+                        return False  # Signal to stop
+                    progress_bar.progress(progress_value)
+                    status_text.text(message)
+                    return True  # Continue processing
                 
-                st.session_state.final_results = df
-                st.session_state.workflow_step = "complete"
-                st.rerun()
-            else:
+                # Run address extraction with progress callback
+                df = run_app2_unified(st.session_state.scraped_data, update_progress)
+                
+                if st.session_state.stop_processing:
+                    status_text.text("⏹️ Processing stopped by user")
+                    st.warning("Processing was stopped. You can restart it anytime.")
+                    return
+                
+                if df is not None and not df.empty:
+                    # Update progress to complete
+                    progress_bar.progress(1.0)
+                    status_text.text("✅ Address extraction completed!")
+                    
+                    # Clear live results placeholder
+                    live_results_placeholder.empty()
+                    
+                    st.session_state.final_results = df
+                    st.session_state.processing_completed = True
+                    st.session_state.workflow_step = "complete"
+                    st.rerun()
+                else:
+                    progress_bar.progress(0)
+                    status_text.text("❌ Address extraction failed")
+                    st.error("❌ Address extraction failed. No addresses found for any records.")
+                    st.session_state.processing_error = "No addresses found for any records"
+            except Exception as e:
                 progress_bar.progress(0)
                 status_text.text("❌ Address extraction failed")
-                st.error("❌ Address extraction failed. No addresses found for any records.")
-        except Exception as e:
-            progress_bar.progress(0)
-            status_text.text("❌ Address extraction failed")
-            st.error(f"❌ Address extraction failed with error: {str(e)}")
-            logger.error(f"Address extraction error: {e}")
+                st.error(f"❌ Address extraction failed with error: {str(e)}")
+                logger.error(f"Address extraction error: {e}")
+                st.session_state.processing_error = str(e)
+        elif st.session_state.stop_processing:
+            status_text.text("⏹️ Processing stopped by user")
+            st.warning("Processing was stopped. Click 'Retry Processing' to restart.")
+            if st.button("🔄 Retry Processing"):
+                st.session_state.stop_processing = False
+                st.session_state.processing_started = False
+                st.session_state.processing_error = None
+                st.rerun()
     else:
         st.warning("⚠️ No scraped data available. Please restart the process.")
 
@@ -261,10 +322,18 @@ def _show_final_results():
         # Reset button
         st.markdown("---")
         if st.button("🔄 Start New Search", width='stretch'):
-            # Reset session state
+            # Reset all session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
+            st.session_state.processing_started = False
+            st.session_state.processing_completed = False
+            st.session_state.processing_error = None
+            st.session_state.stop_processing = False
+            if 'live_results' in st.session_state:
+                del st.session_state.live_results
+            if 'live_results_df' in st.session_state:
+                del st.session_state.live_results_df
             st.rerun()
 
 
