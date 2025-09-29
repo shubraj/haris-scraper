@@ -108,7 +108,8 @@ class InstrumentScraperApp:
                     
                     df = self._get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
-                        df["Instrument Type"] = ", ".join(keys)
+                        # Keep the original DocType (code) for proper mapping in Step 2
+                        # The unified address extractor will map codes to names
                         all_results.append(df)
                         logger.info(f"Scraped {len(df)} records for {', '.join(keys)}")
                         st.success(f"Found {len(df)} records")
