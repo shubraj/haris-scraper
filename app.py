@@ -7,7 +7,6 @@ property addresses with AI-powered PDF processing and HCAD fallback.
 import streamlit as st
 import os
 import pandas as pd
-import time
 from apps.instrument_scraper import run_app1
 from apps.unified_address_extractor import run_app2_unified
 from utils.logger_config import get_app_logger
@@ -112,12 +111,18 @@ def main():
         st.session_state.final_results = None
     if "workflow_step" not in st.session_state:
         st.session_state.workflow_step = "scrape"
-    if "processing_state" not in st.session_state:
-        st.session_state.processing_state = "idle"  # idle, processing, completed, error
-    if "processing_started" not in st.session_state:
-        st.session_state.processing_started = False
-    if "can_resume" not in st.session_state:
-        st.session_state.can_resume = False
+    if "processing" not in st.session_state:
+        st.session_state.processing = False
+    if "process_interrupted" not in st.session_state:
+        st.session_state.process_interrupted = False
+    if "page_refreshed" not in st.session_state:
+        st.session_state.page_refreshed = False
+    
+    # Detect page refresh and interrupt processing
+    if st.session_state.workflow_step == "extract" and st.session_state.processing and not st.session_state.page_refreshed:
+        st.session_state.process_interrupted = True
+        st.session_state.processing = False
+        st.session_state.page_refreshed = True
     
     # Main workflow
     if st.session_state.workflow_step == "scrape":
@@ -156,110 +161,92 @@ def _show_address_extraction_step():
         st.markdown("Extracting property addresses from PDFs using AI, with HCAD fallback for missing addresses.")
         st.markdown("---")
     
+    # Check if process was interrupted (page refresh)
+    if st.session_state.process_interrupted:
+        st.warning("⚠️ Process was interrupted. Please restart the workflow.")
+        if st.button("🔄 Restart Workflow"):
+            # Reset all session state
+            st.session_state.scraped_data = None
+            st.session_state.final_results = None
+            st.session_state.workflow_step = "scrape"
+            st.session_state.processing = False
+            st.session_state.process_interrupted = False
+            if 'live_results' in st.session_state:
+                del st.session_state.live_results
+            if 'live_results_df' in st.session_state:
+                del st.session_state.live_results_df
+            st.rerun()
+        return
+    
     if st.session_state.scraped_data is not None:
-        # Check if we're in a processing state
-        if st.session_state.processing_state == "processing":
-            _show_processing_controls()
+        # Check if we're already processing
+        if st.session_state.processing:
+            st.warning("⚠️ Process is already running. Please wait or refresh to restart.")
+            if st.button("🔄 Restart Process"):
+                st.session_state.process_interrupted = True
+                st.rerun()
             return
         
-        # Show processing info
+        # Mark as processing
+        st.session_state.processing = True
+        
+        # Simple progress display
         st.info(f"📊 Processing {len(st.session_state.scraped_data)} records for address extraction")
         
-        # Control buttons
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("🚀 Start Address Extraction", type="primary", use_container_width=True):
-                st.session_state.processing_state = "processing"
-                st.session_state.processing_started = True
-                st.rerun()
+        # Single progress bar with status
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        with col2:
-            if st.button("🔄 Reset Process", use_container_width=True):
-                _reset_processing_state()
-                st.rerun()
+        # Create placeholders for live results
+        live_results_placeholder = st.empty()
         
-        with col3:
-            if st.button("🏠 Back to Scraping", use_container_width=True):
-                st.session_state.workflow_step = "scrape"
-                st.rerun()
-        
-        # Show existing results if any
-        if st.session_state.get('live_results') and len(st.session_state.live_results) > 0:
-            st.markdown("### 📊 Previous Results Found")
-            st.info(f"Found {len(st.session_state.live_results)} results from previous processing. Click 'Start Address Extraction' to continue or 'Reset Process' to start fresh.")
+        # Auto-start address extraction with progress tracking
+        try:
+            # Update status
+            status_text.text("🚀 Starting address extraction process...")
+            progress_bar.progress(0.1)
             
-            # Show existing results
-            live_df = pd.DataFrame(st.session_state.live_results)
-            st.dataframe(live_df, width='stretch')
+            # Create progress callback function
+            def update_progress(progress_value, message):
+                progress_bar.progress(progress_value)
+                status_text.text(message)
+            
+            # Run address extraction with progress callback
+            df = run_app2_unified(st.session_state.scraped_data, update_progress)
+            
+            if df is not None and not df.empty:
+                # Update progress to complete
+                progress_bar.progress(1.0)
+                status_text.text("✅ Address extraction completed!")
+                
+                # Clear live results placeholder
+                live_results_placeholder.empty()
+                
+                st.session_state.final_results = df
+                st.session_state.workflow_step = "complete"
+                st.session_state.processing = False
+                st.rerun()
+            else:
+                progress_bar.progress(0)
+                status_text.text("❌ Address extraction failed")
+                st.error("❌ Address extraction failed. No addresses found for any records.")
+                st.session_state.processing = False
+        except Exception as e:
+            progress_bar.progress(0)
+            status_text.text("❌ Address extraction failed")
+            st.error(f"❌ Address extraction failed with error: {str(e)}")
+            logger.error(f"Address extraction error: {e}")
+            st.session_state.processing = False
     else:
         st.warning("⚠️ No scraped data available. Please restart the process.")
-
-def _show_processing_controls():
-    """Show processing controls and live results during processing."""
-    st.markdown("### ⚙️ Processing Controls")
-    
-    # Control buttons
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("⏹️ Stop Processing", type="secondary", use_container_width=True):
-            st.session_state.processing_state = "idle"
-            st.session_state.processing_started = False
-            st.warning("⚠️ Processing stopped. You can resume or start fresh.")
-            st.rerun()
-    
-    with col2:
-        if st.button("🔄 Reset Process", use_container_width=True):
-            _reset_processing_state()
-            st.rerun()
-    
-    with col3:
-        if st.button("🏠 Back to Scraping", use_container_width=True):
+        if st.button("🔄 Restart Workflow"):
+            # Reset all session state
+            st.session_state.scraped_data = None
+            st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
+            st.session_state.processing = False
+            st.session_state.process_interrupted = False
             st.rerun()
-    
-    st.markdown("---")
-    
-    # Show processing status
-    if st.session_state.processing_state == "processing":
-        st.info("🔄 Processing in progress... The page will update automatically as results are found.")
-        
-        # Show live results if available
-        if st.session_state.get('live_results') and len(st.session_state.live_results) > 0:
-            live_df = pd.DataFrame(st.session_state.live_results)
-            
-            # Metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Records Processed", len(live_df))
-            with col2:
-                addresses_found = len(live_df[live_df['Property Address'] != ''])
-                st.metric("Addresses Found", addresses_found)
-            with col3:
-                success_rate = (addresses_found / len(live_df)) * 100 if len(live_df) > 0 else 0
-                st.metric("Success Rate", f"{success_rate:.1f}%")
-            
-            # Results table
-            st.markdown("#### 📋 Live Results")
-            st.dataframe(live_df, width='stretch')
-        else:
-            st.info("⏳ Processing started... Results will appear here as they are found.")
-    
-    # Auto-refresh every 2 seconds during processing
-    if st.session_state.processing_state == "processing":
-        time.sleep(2)
-        st.rerun()
-
-def _reset_processing_state():
-    """Reset all processing-related session state."""
-    st.session_state.processing_state = "idle"
-    st.session_state.processing_started = False
-    st.session_state.can_resume = False
-    if 'live_results' in st.session_state:
-        del st.session_state.live_results
-    if 'live_results_df' in st.session_state:
-        del st.session_state.live_results_df
-    if 'hcad_results' in st.session_state:
-        del st.session_state.hcad_results
 
 def _show_final_results():
     """Show the final results with download options."""
@@ -325,10 +312,17 @@ def _show_final_results():
         # Reset button
         st.markdown("---")
         if st.button("🔄 Start New Search", width='stretch'):
-            # Reset session state
+            # Reset all session state
             st.session_state.scraped_data = None
             st.session_state.final_results = None
             st.session_state.workflow_step = "scrape"
+            st.session_state.processing = False
+            st.session_state.process_interrupted = False
+            st.session_state.page_refreshed = False
+            if 'live_results' in st.session_state:
+                del st.session_state.live_results
+            if 'live_results_df' in st.session_state:
+                del st.session_state.live_results_df
             st.rerun()
 
 
