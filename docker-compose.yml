@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  harris-scraper:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./logs:/app/logs
+      - ./test_downloads:/app/test_downloads
+      - ./output.xlsx:/app/output.xlsx
+      - ./output1.xlsx:/app/output1.xlsx
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    container_name: harris-scraper-app
