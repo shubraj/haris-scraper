@@ -202,10 +202,6 @@ class UnifiedAddressExtractorApp:
             
             # Update progress bar
             progress_bar.progress(batch_num / total_batches)
-            
-            # Small delay between batches to respect 400 RPM limit (3 requests per 0.5 seconds)
-            if batch_num < total_batches:
-                time.sleep(0.5)  # 500ms delay between batches
         
         # Clear status text
         status_text.text("✅ PDF processing completed!")
@@ -219,14 +215,18 @@ class UnifiedAddressExtractorApp:
         
         # Process in batches of 10 (HCAD can handle more than 5 with its internal tabs)
         batch_size = 10
+        total_batches = (len(hcad_records) + batch_size - 1) // batch_size
         all_results = []
+        
+        # Create progress bar for HCAD
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
         for i in range(0, len(hcad_records), batch_size):
             batch = hcad_records[i:i + batch_size]
             batch_num = i // batch_size + 1
-            total_batches = (len(hcad_records) + batch_size - 1) // batch_size
             
-            st.write(f"🔍 Processing HCAD batch {batch_num}/{total_batches} ({len(batch)} records)")
+            status_text.text(f"🔍 Processing HCAD batch {batch_num}/{total_batches} ({len(batch)} records)")
             
             # Create DataFrame for this batch
             hcad_df = pd.DataFrame(batch)
@@ -246,6 +246,12 @@ class UnifiedAddressExtractorApp:
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
+            
+            # Update progress bar
+            progress_bar.progress(batch_num / total_batches)
+        
+        # Clear status text
+        status_text.text("✅ HCAD processing completed!")
         
         return all_results
     
