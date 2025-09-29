@@ -144,10 +144,22 @@ class UnifiedAddressExtractorApp:
         # Step 2: Collect records that need HCAD (no PDF or no address found)
         for record in records_list:
             record_id = record.get('FileNo', 'unknown')
-            # Check if this record was processed by PDF and found an address
-            pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
-            if not pdf_result or not pdf_result.get('Property Address', '').strip():
+            pdf_url = record.get('PdfUrl', '')
+            
+            # Check if this record has a PDF URL
+            if not pdf_url or not pdf_url.strip():
+                # No PDF URL - needs HCAD
                 hcad_records.append(record)
+                logger.debug(f"Record {record_id}: No PDF URL - adding to HCAD")
+            else:
+                # Has PDF URL - check if PDF processing found an address
+                pdf_result = next((r for r in pdf_results if r and r.get('FileNo') == record_id), None)
+                if not pdf_result or not pdf_result.get('Property Address', '').strip():
+                    # PDF processing didn't find address - needs HCAD
+                    hcad_records.append(record)
+                    logger.debug(f"Record {record_id}: PDF processing failed/no address - adding to HCAD")
+                else:
+                    logger.debug(f"Record {record_id}: PDF processing found address - skipping HCAD")
         
         # Step 3: Process HCAD records in batches (utilize HCAD's 5 tabs)
         if hcad_records:
@@ -544,6 +556,7 @@ class UnifiedAddressExtractorApp:
         
         # Return only the specified columns in the correct order
         return {
+            'FileNo': original_record.get('FileNo', ''),
             'Grantor': original_record.get('Grantors', ''),
             'Grantee': original_record.get('Grantees', ''),
             'Instrument Type': instrument_type_name,
