@@ -243,8 +243,17 @@ class UnifiedAddressExtractorApp:
                 for future in as_completed(future_to_record):
                     record = future_to_record[future]
                     try:
-                        pdf_address = future.result()
-                        if pdf_address:
+                        pdf_result = future.result()
+                        if pdf_result:
+                            pdf_address = pdf_result.get('address', '') if isinstance(pdf_result, dict) else pdf_result
+                            pdf_grantee_name = pdf_result.get('grantee_name', '') if isinstance(pdf_result, dict) else ''
+                            
+                            # Use PDF grantee name if original grantee is "SEE INSTRUMENT"
+                            if record.get('Grantees', '').strip() == 'SEE INSTRUMENT' and pdf_grantee_name:
+                                record = record.copy()  # Don't modify original
+                                record['Grantees'] = pdf_grantee_name
+                                logger.info(f"🔄 {record.get('FileNo', 'unknown')}: Updated grantee from 'SEE INSTRUMENT' to '{pdf_grantee_name}'")
+                            
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
@@ -306,9 +315,9 @@ class UnifiedAddressExtractorApp:
                             pdf_grantee_name = pdf_result.get('grantee_name', '') if isinstance(pdf_result, dict) else ''
                             
                             # Use PDF grantee name if original grantee is "SEE INSTRUMENT"
-                            if record.get('Grantee', '').strip() == 'SEE INSTRUMENT' and pdf_grantee_name:
+                            if record.get('Grantees', '').strip() == 'SEE INSTRUMENT' and pdf_grantee_name:
                                 record = record.copy()  # Don't modify original
-                                record['Grantee'] = pdf_grantee_name
+                                record['Grantees'] = pdf_grantee_name
                                 logger.info(f"🔄 {record.get('FileNo', 'unknown')}: Updated grantee from 'SEE INSTRUMENT' to '{pdf_grantee_name}'")
                             
                             result = self._create_result_record(record, pdf_address, 'PDF extraction')
@@ -322,6 +331,8 @@ class UnifiedAddressExtractorApp:
                                 # Update live display immediately
                                 if results_placeholder:
                                     self._update_live_results_display(results_placeholder)
+                                    # Small delay to make updates visible
+                                    time.sleep(0.1)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -637,14 +648,11 @@ class UnifiedAddressExtractorApp:
         doc_type_code = original_record.get('DocType', '')
         instrument_type_name = self._get_instrument_type_name(doc_type_code)
         
-        # Use updated grantee name if available (from PDF extraction)
-        grantee_name = original_record.get('Grantee', original_record.get('Grantees', ''))
-        
         # Return only the specified columns in the correct order
         return {
             'FileNo': original_record.get('FileNo', ''),
             'Grantor': original_record.get('Grantors', ''),
-            'Grantee': grantee_name,
+            'Grantee': original_record.get('Grantees', ''),
             'Instrument Type': instrument_type_name,
             'Recording Date': original_record.get('FileDate', ''),
             'Film Code': original_record.get('FilmCode', ''),
