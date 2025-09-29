@@ -48,12 +48,12 @@ class HCADScraper:
             return {}
     
     def _get_instrument_type_name(self, doc_type: str) -> str:
-        """Get human-readable instrument type name from code."""
+        """Get instrument type code (keep original code, don't convert to name)."""
         if not doc_type:
             return ''
         
-        # Try to find the name for this code
-        return self.instrument_type_mapping.get(doc_type, doc_type)
+        # Return the original code directly
+        return doc_type
     
     async def perform_single_search(self, page, search_name: str) -> Optional[str]:
         """
