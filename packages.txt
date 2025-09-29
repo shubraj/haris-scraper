@@ -66,4 +66,4 @@ libenchant-2-2
 libsecret-1-0
 libhyphen0
 libmanette-0.2-0
-libx264-163
+libx264-dev
