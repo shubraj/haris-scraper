@@ -120,16 +120,13 @@ class InstrumentScraperApp:
                     logger.info(f"Scraping operation completed successfully - total records collected: {len(final_df)}")
                     st.success(f"✅ Scraping completed! Total records: {len(final_df)}")
                     
-                    # Display results
-                    st.write("### Results")
-                    st.dataframe(final_df)
                     
                     # Download button
                     csv = final_df.to_csv(index=False)
                     filename = f"instrument_data_{start_date}_{end_date}.csv"
                     logger.info(f"Prepared CSV download file: {filename} ({len(csv)} bytes)")
                     st.download_button(
-                        label="Download CSV",
+                        label="Download Initial Scraped CSV",
                         data=csv,
                         file_name=filename,
                         mime="text/csv"
