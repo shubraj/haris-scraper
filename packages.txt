@@ -25,8 +25,7 @@ tesseract-ocr
 tesseract-ocr-eng
 libtesseract-dev
 libglib2.0-0
-libgthread-2.0-0
-libgconf-2-4
+libglib2.0-dev
 libxext6
 libxrender1
 libxtst6
