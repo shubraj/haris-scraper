@@ -228,8 +228,9 @@ class UnifiedAddressExtractorApp:
             batch = pdf_records[i:i + batch_size]
             batch_num = i // batch_size + 1
             
-            # Update status with batch progress
-            status_placeholder.info(f"📄 Processing PDF batch {batch_num}/{total_batches} ({len(batch)} PDFs) - Total processed so far: {len(st.session_state.live_results)}")
+            # Update status with batch progress in same format as HCAD
+            processed_count = min(i + len(batch), len(pdf_records))
+            status_placeholder.info(f"📄 PDF Processing: {processed_count}/{len(pdf_records)} records ({batch_num}/{total_batches} batches) - Total results so far: {len(st.session_state.live_results)}")
             
             # Process batch concurrently
             with ThreadPoolExecutor(max_workers=3) as executor:
