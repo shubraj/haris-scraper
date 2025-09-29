@@ -40,7 +40,10 @@ class HarrisCountyScraper:
         # Initialize login and security params
         self.login()
         self.security_params = self._get_security_params()
-        logger.info("Harris County scraper initialized successfully with session-based HTTP client")
+        # Only log initialization once per session
+        if not hasattr(self, '_init_logged'):
+            logger.info("Harris County scraper initialized successfully with session-based HTTP client")
+            self._init_logged = True
     
     def _get_search_url(self) -> str:
         """Get the search URL for Harris County records."""
@@ -92,7 +95,10 @@ class HarrisCountyScraper:
             data=data
         )
         if response.url.endswith("/Applications/WebSearch/Home.aspx"):
-            logger.info("Successfully authenticated with Harris County Clerk's website")
+            # Only log authentication success once per session
+            if not hasattr(self, '_login_logged'):
+                logger.info("Successfully authenticated with Harris County Clerk's website")
+                self._login_logged = True
         else:
             logger.error(f"Authentication failed - unexpected redirect to: {response.url}")
             raise Exception("Login failed - invalid credentials or network issue")
@@ -257,6 +263,8 @@ class HarrisCountyScraper:
             record["PdfUrl"] = ""
             if record["FilmCode"]:
                 pdfUrl = cells[7].select_one("a").get("href") or ""
+                if pdfUrl:
+                    record["PdfUrl"] = f"https://www.cclerk.hctx.net/Applications/WebSearch/{pdfUrl}"
 
 
             return record
@@ -563,13 +571,3 @@ def parse_html_to_excel(html: str) -> pd.DataFrame:
 def get_table(instrument_type: str, starting_date: str, ending_date: str) -> pd.DataFrame:
     """Backward compatibility function."""
     return get_scraper().scrape_records(instrument_type, starting_date, ending_date)
-
-
-def download_pdf(pdf_url: str, output_path: str) -> bool:
-    """Backward compatibility function for PDF download."""
-    return get_scraper().download_pdf(pdf_url, output_path)
-
-
-def download_pdfs_from_records(records_df: pd.DataFrame, output_dir: str = "downloads") -> Dict[str, bool]:
-    """Backward compatibility function for bulk PDF download."""
-    return get_scraper().download_pdfs_from_records(records_df, output_dir)

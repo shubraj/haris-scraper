@@ -94,11 +94,14 @@ class InstrumentScraperApp:
                 progress_bar = st.progress(0)
                 total_codes = len(code_to_keys)
                 
+                # Get scraper instance once to avoid repeated initialization
+                scraper = get_scraper()
+                
                 for i, (code, keys) in enumerate(code_to_keys.items()):
                     logger.info(f"Processing instrument code '{code}' for types: {keys} ({i+1}/{total_codes})")
                     st.write(f"Scraping: {', '.join(keys)} (Code: {code})")
                     
-                    df = get_scraper().scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
+                    df = scraper.scrape_records(code, start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y"))
                     if not df.empty:
                         df["Instrument Type"] = ", ".join(keys)
                         all_results.append(df)
