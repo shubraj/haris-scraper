@@ -395,22 +395,11 @@ class UnifiedAddressExtractorApp:
                 if not pdf_path:
                     return None
                 
-                # Check PDF page count - skip if more than 6 pages
-                try:
-                    import fitz  # PyMuPDF
-                    pdf_doc = fitz.open(pdf_path)
-                    page_count = pdf_doc.page_count
-                    pdf_doc.close()
-                    
-                    if page_count > 6:
-                        logger.info(f"Skipping PDF for record {record.get('FileNo', 'unknown')}: {page_count} pages (exceeds 6-page limit)")
-                        return None
-                except Exception as e:
-                    logger.warning(f"Could not check page count for record {record.get('FileNo', 'unknown')}: {e}")
-                    # Continue with processing if page count check fails
-                
                 # Extract text and addresses
                 ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
+                # if more than 7 pages, skip
+                if len(ocr_results) > 7:
+                    return None
                 pdf_text = " ".join([page['text'] for page in ocr_results])
                 
                 if pdf_text.strip():
