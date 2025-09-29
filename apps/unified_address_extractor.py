@@ -116,6 +116,8 @@ class UnifiedAddressExtractorApp:
             st.session_state.total_processed = 0
         if 'pdf_processed' not in st.session_state:
             st.session_state.pdf_processed = 0
+        if 'hcad_processed' not in st.session_state:
+            st.session_state.hcad_processed = 0
         
         # Create live results display
         results_placeholder = st.empty()
@@ -289,17 +291,20 @@ class UnifiedAddressExtractorApp:
             live_df = pd.DataFrame(st.session_state.live_results)
             st.session_state.live_results_df = live_df
             
+            # Calculate total processed (PDF + HCAD)
+            total_processed = st.session_state.pdf_processed + st.session_state.get('hcad_processed', 0)
+            
             # Show live results
             with results_placeholder.container():
                 st.markdown("### 📊 Live Results (Updated in Real-Time)")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Records Processed", st.session_state.pdf_processed)
+                    st.metric("Records Processed", total_processed)
                 with col2:
                     addresses_found = len(live_df[live_df['Property Address'] != ''])
                     st.metric("Addresses Found", addresses_found)
                 with col3:
-                    success_rate = (addresses_found / st.session_state.pdf_processed) * 100 if st.session_state.pdf_processed > 0 else 0
+                    success_rate = (addresses_found / total_processed) * 100 if total_processed > 0 else 0
                     st.metric("Success Rate", f"{success_rate:.1f}%")
                 
                 # Show ALL results accumulated so far
@@ -339,6 +344,9 @@ class UnifiedAddressExtractorApp:
             
             # Run HCAD search for this batch
             await run_hcad_searches(hcad_df)
+            
+            # Track HCAD processed records
+            st.session_state.hcad_processed += len(batch)
             
             # Get results and update live display
             if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
