@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     unzip \
     curl \
+    tesseract-ocr \
+    tesseract-ocr-eng \
     libnss3 \
     libatk-bridge2.0-0 \
     libdrm2 \
