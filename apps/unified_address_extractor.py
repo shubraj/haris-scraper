@@ -250,7 +250,9 @@ class UnifiedAddressExtractorApp:
             
             # Update status with batch progress in same format as HCAD
             processed_count = i + len(batch)
-            status_placeholder.info(f"📄 PDF Processing: {processed_count}/{len(pdf_records)} records ({batch_num}/{total_batches} batches) - Total results so far: {len(st.session_state.live_results)}")
+            # Count addresses found so far
+            addresses_found = len([r for r in st.session_state.live_results if r.get('Property Address', '').strip()])
+            status_placeholder.info(f"📄 PDF Processing: {processed_count}/{len(pdf_records)} records ({batch_num}/{total_batches} batches) - Addresses found so far: {addresses_found}")
             
             # Process batch concurrently
             with ThreadPoolExecutor(max_workers=5) as executor:
@@ -272,11 +274,10 @@ class UnifiedAddressExtractorApp:
                             batch_results.append(result)
                             logger.info(f"✅ {record.get('FileNo', 'unknown')}: Found address in PDF: {pdf_address}")
                             
-                            # Add to live results and update display (check for duplicates)
+                            # Add to live results (check for duplicates)
                             existing_file_nos = [r.get('FileNo') for r in st.session_state.live_results if r.get('FileNo')]
                             if result.get('FileNo') not in existing_file_nos:
                                 st.session_state.live_results.append(result)
-                                self._update_live_results_display(results_placeholder)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -286,6 +287,10 @@ class UnifiedAddressExtractorApp:
                         st.session_state.pdf_processed += 1  # Still count as processed even if failed
                 
                 all_results.extend(batch_results)
+                
+                # Update live display after PDF processing
+                if results_placeholder:
+                    self._update_live_results_display(results_placeholder)
         
         return all_results
     
@@ -338,7 +343,9 @@ class UnifiedAddressExtractorApp:
             
             # Update status with accumulated results count
             if status_placeholder:
-                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Total results so far: {len(st.session_state.live_results)}")
+                # Count addresses found so far
+                addresses_found = len([r for r in st.session_state.live_results if r.get('Property Address', '').strip()])
+                status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Addresses found so far: {addresses_found}")
             
             # Update progress
             if progress_callback:
@@ -355,9 +362,6 @@ class UnifiedAddressExtractorApp:
             # Run HCAD search for this batch
             await run_hcad_searches(hcad_df)
             
-            # Track HCAD processed records
-            st.session_state.hcad_processed += len(batch)
-            
             # Get results and update live display
             if 'hcad_results' in st.session_state and not st.session_state.hcad_results.empty:
                 batch_results = st.session_state.hcad_results.to_dict('records')
@@ -365,15 +369,20 @@ class UnifiedAddressExtractorApp:
                 
                 # Add to live results and update display immediately (check for duplicates)
                 existing_file_nos = [r.get('FileNo') for r in st.session_state.live_results if r.get('FileNo')]
+                added_count = 0
                 for result in batch_results:
                     if result.get('FileNo') not in existing_file_nos:
                         st.session_state.live_results.append(result)
+                        added_count += 1
+                
+                # Track HCAD processed records (count actual records processed, not results found)
+                st.session_state.hcad_processed += len(batch)
                 
                 # Update live display with all accumulated results
                 if results_placeholder:
                     self._update_live_results_display(results_placeholder)
                 
-                logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses")
+                logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses, added {added_count} new")
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
         
