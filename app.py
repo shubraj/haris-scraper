@@ -27,6 +27,14 @@ def main():
         initial_sidebar_state="expanded"
     )
     
+    # Clear any stale session state on startup
+    if 'clear_cache' not in st.session_state:
+        st.session_state.clear_cache = True
+        # Clear any stale file references
+        for key in list(st.session_state.keys()):
+            if key.startswith('file_') or key.endswith('_file'):
+                del st.session_state[key]
+    
     # Custom CSS for smooth UI
     st.markdown("""
     <style>
@@ -232,31 +240,35 @@ def _show_final_results():
         st.subheader("📥 Download Results")
         col1, col2 = st.columns(2)
         
-        with col1:
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📊 Download CSV",
-                data=csv,
-                file_name="harris_county_property_data.csv",
-                mime="text/csv",
-                width='stretch'
-            )
-        
-        with col2:
-            # Excel download
-            import io
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Property Data')
-            excel_data = output.getvalue()
+        try:
+            with col1:
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📊 Download CSV",
+                    data=csv,
+                    file_name=f"harris_county_property_data_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    width='stretch'
+                )
             
-            st.download_button(
-                label="📈 Download Excel",
-                data=excel_data,
-                file_name="harris_county_property_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width='stretch'
-            )
+            with col2:
+                # Excel download
+                import io
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Property Data')
+                excel_data = output.getvalue()
+                
+                st.download_button(
+                    label="📈 Download Excel",
+                    data=excel_data,
+                    file_name=f"harris_county_property_data_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width='stretch'
+                )
+        except Exception as e:
+            st.error(f"Error creating download files: {e}")
+            logger.error(f"Download file creation error: {e}")
         
         # Reset button
         st.markdown("---")
