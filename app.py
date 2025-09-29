@@ -22,15 +22,33 @@ def main():
         initial_sidebar_state="expanded"
     )
     
+    # Initialize session state
+    if "app1_results" not in st.session_state:
+        st.session_state.app1_results = None
+    if "current_step" not in st.session_state:
+        st.session_state.current_step = 1
+    if "step1_completed" not in st.session_state:
+        st.session_state.step1_completed = False
+    if "step2_completed" not in st.session_state:
+        st.session_state.step2_completed = False
+    
     # Sidebar navigation
     st.sidebar.title("🏠 Harris County Property Scraper")
     st.sidebar.markdown("---")
     
-    choice = st.sidebar.radio(
-        "Select Step:",
-        ["Step 1: Scrape Instruments", "Step 2: Extract Addresses"],
-        help="Step 1: Scrape instrument data from Harris County records\nStep 2: Extract addresses from PDFs and HCAD fallback"
-    )
+    # Progress indicator
+    st.sidebar.markdown("### Progress")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.session_state.step1_completed:
+            st.success("✅ Step 1")
+        else:
+            st.info("⏳ Step 1")
+    with col2:
+        if st.session_state.step2_completed:
+            st.success("✅ Step 2")
+        else:
+            st.info("⏳ Step 2")
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("### About")
@@ -39,34 +57,115 @@ def main():
     1. **Scrape** Harris County instrument data
     2. **Extract** addresses from PDFs and HCAD fallback
     
-    Complete steps in order for best results.
+    Steps will progress automatically.
     """)
     
-    # Initialize session state
-    if "app1_results" not in st.session_state:
-        st.session_state.app1_results = None
+    # Main content area with smooth transitions
+    if st.session_state.current_step == 1:
+        _render_step1()
+    elif st.session_state.current_step == 2:
+        _render_step2()
+    else:
+        _render_completion()
+
+
+def _render_step1():
+    """Render Step 1: Scrape Instruments."""
+    st.header("📊 Step 1: Scrape Instruments")
+    st.markdown("Scrape instrument data from Harris County Clerk's Office records.")
     
-    # Main content area
-    if choice == "Step 1: Scrape Instruments":
-        st.header("📊 Step 1: Scrape Instruments")
-        st.markdown("Scrape instrument data from Harris County Clerk's Office records.")
+    # Add some visual flair
+    st.markdown("---")
+    
+    df = run_app1()
+    if df is not None and not df.empty:
+        st.session_state.app1_results = df
+        st.session_state.step1_completed = True
         
-        df = run_app1()
+        # Success message with auto-progression
+        st.success("✅ Data ready for address extraction!")
+        st.balloons()
+        
+        # Auto-progress to Step 2
+        st.markdown("### 🚀 Automatically proceeding to Step 2...")
+        st.session_state.current_step = 2
+        st.rerun()
+
+
+def _render_step2():
+    """Render Step 2: Extract Addresses."""
+    st.header("🔍 Step 2: Extract Addresses")
+    st.markdown("Extract property addresses from PDFs using AI, with HCAD fallback for missing addresses.")
+    
+    # Add some visual flair
+    st.markdown("---")
+    
+    if st.session_state.app1_results is not None:
+        df = run_app2_unified(st.session_state.app1_results)
         if df is not None and not df.empty:
-            st.session_state.app1_results = df
-            st.success("✅ Data ready for address extraction!")
-    
-    elif choice == "Step 2: Extract Addresses":
-        st.header("🔍 Step 2: Extract Addresses")
-        st.markdown("Extract property addresses from PDFs using AI, with HCAD fallback for missing addresses.")
-        
-        if st.session_state.app1_results is not None:
-            df = run_app2_unified(st.session_state.app1_results)
-            if df is not None and not df.empty:
-                st.session_state.app1_results = df  # Update with addresses
-                st.success("✅ Address extraction completed!")
+            st.session_state.app1_results = df  # Update with addresses
+            st.session_state.step2_completed = True
+            
+            # Success message
+            st.success("✅ Address extraction completed!")
+            st.balloons()
+            
+            # Show completion options
+            st.markdown("### 🎉 All Steps Completed!")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Start Over", type="secondary"):
+                    _reset_session()
+            with col2:
+                if st.button("📊 View Results", type="primary"):
+                    st.session_state.current_step = 3
+                    st.rerun()
         else:
-            st.warning("⚠️ Please complete Step 1 first to get instrument data.")
+            st.warning("⚠️ No addresses found. Please check the data or try different search parameters.")
+    else:
+        st.warning("⚠️ Please complete Step 1 first to get instrument data.")
+        if st.button("⬅️ Go to Step 1", type="secondary"):
+            st.session_state.current_step = 1
+            st.rerun()
+
+
+def _render_completion():
+    """Render completion view with results."""
+    st.header("🎉 Process Complete!")
+    st.markdown("All steps have been completed successfully.")
+    
+    if st.session_state.app1_results is not None:
+        st.markdown("### 📊 Final Results")
+        st.dataframe(st.session_state.app1_results, use_container_width=True)
+        
+        # Download button
+        csv = st.session_state.app1_results.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Results (CSV)",
+            data=csv,
+            file_name="harris_county_property_data.csv",
+            mime="text/csv",
+            type="primary"
+        )
+    
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Start New Process", type="primary"):
+            _reset_session()
+    with col2:
+        if st.button("⬅️ Back to Step 2", type="secondary"):
+            st.session_state.current_step = 2
+            st.rerun()
+
+
+def _reset_session():
+    """Reset the session state to start over."""
+    st.session_state.app1_results = None
+    st.session_state.current_step = 1
+    st.session_state.step1_completed = False
+    st.session_state.step2_completed = False
+    st.rerun()
 
 
 if __name__ == "__main__":
