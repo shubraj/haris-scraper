@@ -478,16 +478,35 @@ class UnifiedAddressExtractorApp:
                     return None
                 
                 # Extract text and addresses
-                ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
-                # if more than 7 pages, skip
-                if len(ocr_results) > 7:
-                    return None
-                pdf_text = " ".join([page['text'] for page in ocr_results])
-                
-                if pdf_text.strip():
-                    addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
-                    if addresses:
-                        return self.address_extractor.standardize_address(addresses[0])
+                try:
+                    ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
+                    # if more than 7 pages, skip
+                    if len(ocr_results) > 7:
+                        logger.warning(f"PDF too long ({len(ocr_results)} pages) for record {record.get('FileNo', 'unknown')} - skipping")
+                        return None
+                    pdf_text = " ".join([page['text'] for page in ocr_results])
+                    
+                    if pdf_text.strip():
+                        addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
+                        if addresses:
+                            return self.address_extractor.standardize_address(addresses[0])
+                except Exception as ocr_error:
+                    logger.warning(f"OCR failed for record {record.get('FileNo', 'unknown')}: {ocr_error}")
+                    # Try with lower DPI as fallback
+                    try:
+                        logger.info(f"Retrying OCR with lower DPI for record {record.get('FileNo', 'unknown')}")
+                        ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=150, config="--psm 6")
+                        if len(ocr_results) > 7:
+                            return None
+                        pdf_text = " ".join([page['text'] for page in ocr_results])
+                        
+                        if pdf_text.strip():
+                            addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
+                            if addresses:
+                                return self.address_extractor.standardize_address(addresses[0])
+                    except Exception as retry_error:
+                        logger.warning(f"OCR retry also failed for record {record.get('FileNo', 'unknown')}: {retry_error}")
+                        return None
                 
                 return None
                 
