@@ -32,28 +32,7 @@ class PDFOCR:
             logger.info(f"Tesseract OCR engine initialized successfully - version: {version}")
         except Exception as e:
             logger.error(f"Tesseract OCR engine not found or not accessible: {e}")
-            # Try to find tesseract in common locations
-            common_paths = [
-                '/usr/bin/tesseract',
-                '/usr/local/bin/tesseract',
-                '/opt/homebrew/bin/tesseract',
-                '/usr/bin/tesseract-ocr',
-                '/usr/local/bin/tesseract-ocr'
-            ]
-            
-            for path in common_paths:
-                if os.path.exists(path):
-                    logger.info(f"Found tesseract at {path}, setting as command")
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    try:
-                        version = pytesseract.get_tesseract_version()
-                        logger.info(f"Tesseract OCR engine initialized successfully - version: {version}")
-                        break
-                    except Exception:
-                        continue
-            else:
-                logger.error("Could not find tesseract in any common locations")
-                raise
+            raise
     
     def pdf_to_images(self, pdf_path: str, dpi: int = 300) -> List[Image.Image]:
         """
@@ -107,95 +86,12 @@ class PDFOCR:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Check if image is valid
-            if image.size[0] == 0 or image.size[1] == 0:
-                logger.warning("Skipping OCR for empty image")
-                return ""
-            
-            # Try different OCR configurations if the default fails
-            configs_to_try = [
-                config,  # Original config
-                "--psm 3",  # Fully automatic page segmentation
-                "--psm 1",  # Automatic page segmentation with OSD
-                "--psm 6",  # Uniform block of text
-                ""  # No config
-            ]
-            
-            for ocr_config in configs_to_try:
-                try:
-                    if ocr_config:
-                        text = pytesseract.image_to_string(image, config=ocr_config)
-                    else:
-                        text = pytesseract.image_to_string(image)
-                    
-                    if text.strip():  # If we got some text, return it
-                        logger.debug(f"OCR successful with config: {ocr_config or 'default'}")
-                        return text.strip()
-                        
-                except Exception as ocr_error:
-                    logger.debug(f"OCR failed with config '{ocr_config}': {ocr_error}")
-                    continue
-            
-            # If all configs failed, try with image preprocessing
-            logger.warning("All OCR configs failed, trying with image preprocessing")
-            return self._ocr_with_preprocessing(image)
+            # Perform OCR
+            text = pytesseract.image_to_string(image, config=config)
+            return text.strip()
             
         except Exception as e:
             logger.error(f"Error performing OCR on image: {e}")
-            return ""
-    
-    def _ocr_with_preprocessing(self, image: Image.Image) -> str:
-        """
-        Perform OCR with image preprocessing to improve results.
-        
-        Args:
-            image: PIL Image object
-            
-        Returns:
-            Extracted text
-        """
-        try:
-            from PIL import ImageEnhance, ImageFilter
-            
-            # Try different preprocessing techniques
-            preprocessed_images = [
-                image,  # Original
-                image.convert('L'),  # Grayscale
-                ImageEnhance.Contrast(image).enhance(2.0),  # High contrast
-                image.filter(ImageFilter.SHARPEN),  # Sharpened
-                ImageEnhance.Contrast(image.convert('L')).enhance(2.0),  # Grayscale + contrast
-            ]
-            
-            for i, processed_image in enumerate(preprocessed_images):
-                try:
-                    # Ensure RGB mode
-                    if processed_image.mode != 'RGB':
-                        processed_image = processed_image.convert('RGB')
-                    
-                    # Try OCR with different configs
-                    for config in ["--psm 6", "--psm 3", "--psm 1", ""]:
-                        try:
-                            if config:
-                                text = pytesseract.image_to_string(processed_image, config=config)
-                            else:
-                                text = pytesseract.image_to_string(processed_image)
-                            
-                            if text.strip():
-                                logger.debug(f"OCR successful with preprocessing {i} and config: {config or 'default'}")
-                                return text.strip()
-                                
-                        except Exception:
-                            continue
-                            
-                except Exception as e:
-                    logger.debug(f"Preprocessing {i} failed: {e}")
-                    continue
-            
-            logger.warning("All OCR attempts failed, including preprocessing")
-            return ""
-            
-        except Exception as e:
-            logger.error(f"Error in OCR preprocessing: {e}")
             return ""
     
     def ocr_pdf(self, pdf_path: str, dpi: int = 300, config: str = "--psm 6") -> List[Dict[str, any]]:

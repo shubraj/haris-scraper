@@ -308,6 +308,8 @@ class UnifiedAddressExtractorApp:
                                 # Update live display immediately
                                 if results_placeholder:
                                     self._update_live_results_display(results_placeholder)
+                                    # Small delay to make updates visible
+                                    time.sleep(0.1)
                         else:
                             batch_results.append(None)
                     except Exception as e:
@@ -416,6 +418,9 @@ class UnifiedAddressExtractorApp:
                 addresses_found = len([r for r in st.session_state.live_results if r.get('Property Address', '').strip()])
                 status_placeholder.info(f"🔍 HCAD Search: {processed_count}/{len(hcad_records)} records ({batch_num}/{total_batches} batches) - Addresses found so far: {addresses_found}")
                 
+                # Small delay to make updates visible
+                await asyncio.sleep(0.5)
+                
                 logger.info(f"✅ HCAD batch {batch_num}: Found {len(batch_results)} addresses, added {added_count} new")
             else:
                 logger.warning(f"⚠️ HCAD batch {batch_num}: No results found")
@@ -478,35 +483,16 @@ class UnifiedAddressExtractorApp:
                     return None
                 
                 # Extract text and addresses
-                try:
-                    ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
-                    # if more than 7 pages, skip
-                    if len(ocr_results) > 7:
-                        logger.warning(f"PDF too long ({len(ocr_results)} pages) for record {record.get('FileNo', 'unknown')} - skipping")
-                        return None
-                    pdf_text = " ".join([page['text'] for page in ocr_results])
-                    
-                    if pdf_text.strip():
-                        addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
-                        if addresses:
-                            return self.address_extractor.standardize_address(addresses[0])
-                except Exception as ocr_error:
-                    logger.warning(f"OCR failed for record {record.get('FileNo', 'unknown')}: {ocr_error}")
-                    # Try with lower DPI as fallback
-                    try:
-                        logger.info(f"Retrying OCR with lower DPI for record {record.get('FileNo', 'unknown')}")
-                        ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=150, config="--psm 6")
-                        if len(ocr_results) > 7:
-                            return None
-                        pdf_text = " ".join([page['text'] for page in ocr_results])
-                        
-                        if pdf_text.strip():
-                            addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
-                            if addresses:
-                                return self.address_extractor.standardize_address(addresses[0])
-                    except Exception as retry_error:
-                        logger.warning(f"OCR retry also failed for record {record.get('FileNo', 'unknown')}: {retry_error}")
-                        return None
+                ocr_results = self.pdf_ocr.ocr_pdf(pdf_path, dpi=300, config="--psm 6")
+                # if more than 7 pages, skip
+                if len(ocr_results) > 7:
+                    return None
+                pdf_text = " ".join([page['text'] for page in ocr_results])
+                
+                if pdf_text.strip():
+                    addresses = self.address_extractor.extract_grantees_addresses_only(pdf_text)
+                    if addresses:
+                        return self.address_extractor.standardize_address(addresses[0])
                 
                 return None
                 
